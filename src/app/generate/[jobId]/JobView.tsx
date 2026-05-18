@@ -128,7 +128,10 @@ export function JobView({
           <div className="text-sm">
             <div>预计消耗 <strong>{cost}</strong> 积分（剩余 {credits}）</div>
             {!enoughCredits && (
-              <div className="text-red-600 text-xs mt-1">积分不足，请先充值。</div>
+              <div className="text-red-600 text-xs mt-1">
+                积分不足，
+                <a href="/pricing" className="underline">立即充值</a>。
+              </div>
             )}
           </div>
           <button

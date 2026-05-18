@@ -38,12 +38,20 @@ export default async function DashboardPage() {
             <h1 className="text-3xl font-bold">控制台</h1>
             <p className="text-sm text-zinc-500 mt-1">{user.email}</p>
           </div>
-          <Link
-            href="/generate"
-            className="rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 text-sm font-medium"
-          >
-            开始生成
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/pricing"
+              className="rounded-md border border-zinc-300 dark:border-zinc-700 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            >
+              充值
+            </Link>
+            <Link
+              href="/generate"
+              className="rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 text-sm font-medium"
+            >
+              开始生成
+            </Link>
+          </div>
         </header>
 
         <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">

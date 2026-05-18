@@ -15,6 +15,9 @@ export async function Nav() {
               <Link href="/dashboard" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
                 控制台
               </Link>
+              <Link href="/pricing" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
+                充值
+              </Link>
               <span className="text-zinc-400">|</span>
               <span className="text-zinc-500 text-xs">{session.user.email}</span>
               <form
@@ -30,6 +33,9 @@ export async function Nav() {
             </>
           ) : (
             <>
+              <Link href="/pricing" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
+                价格
+              </Link>
               <Link href="/login" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
                 登录
               </Link>
