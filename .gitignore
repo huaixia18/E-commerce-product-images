@@ -45,6 +45,9 @@ yarn-error.log*
 # claude scratch
 .claude/
 
+# local stub output
+/tmp/
+
 # vercel
 .vercel
 

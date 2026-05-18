@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { PANEL_IDS, type PanelId } from "@/lib/promptTemplate";
 
 const STYLES = ["minimal", "vivid", "premium", "warm"] as const;
 const PLATFORMS = ["taobao", "tmall", "jd", "amazon", "generic"] as const;
@@ -15,6 +16,11 @@ const schema = z.object({
     .array(z.string().regex(/^uploads\/[\w/.-]+$/, "Invalid OSS key"))
     .min(1)
     .max(5),
+  panels: z
+    .array(z.enum(PANEL_IDS as [PanelId, ...PanelId[]]))
+    .min(1)
+    .max(PANEL_IDS.length)
+    .optional(),
 });
 
 export async function POST(req: Request) {

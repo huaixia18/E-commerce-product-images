@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { compressImage, TARGET_MIME } from "@/lib/clientImage";
+import { PANELS, type PanelId } from "@/lib/promptTemplate";
 
 interface Slot {
-  // After compression + upload, ossKey is set. While uploading, status reflects progress.
   id: string;
   previewUrl: string;
   width: number;
@@ -38,12 +38,19 @@ export function GenerateForm() {
   const [highlightsText, setHighlightsText] = useState("");
   const [style, setStyle] = useState<(typeof STYLES)[number]["value"]>("minimal");
   const [platform, setPlatform] = useState<(typeof PLATFORMS)[number]["value"]>("generic");
+  const [selectedPanels, setSelectedPanels] = useState<Set<PanelId>>(
+    new Set(PANELS.map((p) => p.id)),
+  );
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, startTransition] = useTransition();
 
   const doneSlots = slots.filter((s) => s.status === "done");
   const canSubmit =
-    !submitting && title.trim().length > 0 && parseHighlights(highlightsText).length > 0 && doneSlots.length > 0;
+    !submitting &&
+    title.trim().length > 0 &&
+    parseHighlights(highlightsText).length > 0 &&
+    doneSlots.length > 0 &&
+    selectedPanels.size > 0;
 
   async function handleFiles(files: FileList | null) {
     if (!files) return;
@@ -51,11 +58,10 @@ export function GenerateForm() {
     const picks = Array.from(files).slice(0, room);
     for (const file of picks) {
       const id = crypto.randomUUID();
-      // 1) compress on-device
       let compressed;
       try {
         compressed = await compressImage(file);
-      } catch (e) {
+      } catch {
         appendSlot({ id, previewUrl: "", width: 0, height: 0, bytes: 0, status: "error", error: "压缩失败" });
         continue;
       }
@@ -67,8 +73,6 @@ export function GenerateForm() {
         bytes: compressed.bytes,
         status: "uploading",
       });
-
-      // 2) ask backend for a signed PUT URL
       try {
         const signRes = await fetch("/api/uploads/sign", {
           method: "POST",
@@ -82,14 +86,12 @@ export function GenerateForm() {
         const item = signJson.items[0];
         if (!item) throw new Error("no signed url");
 
-        // 3) PUT to OSS
         const putRes = await fetch(item.uploadUrl, {
           method: "PUT",
           headers: { "Content-Type": TARGET_MIME },
           body: compressed.blob,
         });
         if (!putRes.ok) throw new Error(`oss ${putRes.status}`);
-
         patchSlot(id, { status: "done", ossKey: item.ossKey });
       } catch (e) {
         patchSlot(id, { status: "error", error: e instanceof Error ? e.message : "上传失败" });
@@ -105,8 +107,8 @@ export function GenerateForm() {
   }
   function removeSlot(id: string) {
     setSlots((prev) => {
-      const target = prev.find((s) => s.id === id);
-      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+      const t = prev.find((s) => s.id === id);
+      if (t?.previewUrl) URL.revokeObjectURL(t.previewUrl);
       return prev.filter((s) => s.id !== id);
     });
   }
@@ -117,6 +119,14 @@ export function GenerateForm() {
       if (i < 0 || j < 0 || j >= prev.length) return prev;
       const next = prev.slice();
       [next[i], next[j]] = [next[j], next[i]];
+      return next;
+    });
+  }
+  function togglePanel(p: PanelId) {
+    setSelectedPanels((prev) => {
+      const next = new Set(prev);
+      if (next.has(p)) next.delete(p);
+      else next.add(p);
       return next;
     });
   }
@@ -136,6 +146,12 @@ export function GenerateForm() {
       setSubmitError("请至少填写一条卖点");
       return;
     }
+    if (selectedPanels.size === 0) {
+      setSubmitError("请至少选择一种要生成的图");
+      return;
+    }
+
+    const panels = PANELS.filter((p) => selectedPanels.has(p.id)).map((p) => p.id);
 
     startTransition(async () => {
       const res = await fetch("/api/jobs", {
@@ -147,6 +163,7 @@ export function GenerateForm() {
           style,
           platform,
           sourceImageKeys,
+          panels,
         }),
       });
       if (!res.ok) {
@@ -159,6 +176,8 @@ export function GenerateForm() {
     });
   }
 
+  const cost = selectedPanels.size;
+
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       <section className="space-y-2">
@@ -168,10 +187,7 @@ export function GenerateForm() {
             {slots.length}/{MAX_FILES} · 第一张为主图
           </span>
         </div>
-        <Dropzone
-          disabled={slots.length >= MAX_FILES}
-          onFiles={handleFiles}
-        />
+        <Dropzone disabled={slots.length >= MAX_FILES} onFiles={handleFiles} />
         {slots.length > 0 && (
           <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-3">
             {slots.map((s, i) => (
@@ -193,27 +209,9 @@ export function GenerateForm() {
                     {s.status === "error" && (s.error || "失败")}
                   </span>
                   <div className="flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => moveSlot(s.id, -1)}
-                      disabled={i === 0}
-                      className="disabled:opacity-30"
-                      aria-label="上移"
-                    >
-                      ←
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => moveSlot(s.id, 1)}
-                      disabled={i === slots.length - 1}
-                      className="disabled:opacity-30"
-                      aria-label="下移"
-                    >
-                      →
-                    </button>
-                    <button type="button" onClick={() => removeSlot(s.id)} aria-label="移除">
-                      ✕
-                    </button>
+                    <button type="button" onClick={() => moveSlot(s.id, -1)} disabled={i === 0} className="disabled:opacity-30">←</button>
+                    <button type="button" onClick={() => moveSlot(s.id, 1)} disabled={i === slots.length - 1} className="disabled:opacity-30">→</button>
+                    <button type="button" onClick={() => removeSlot(s.id)}>✕</button>
                   </div>
                 </div>
               </li>
@@ -234,10 +232,7 @@ export function GenerateForm() {
         />
       </Field>
 
-      <Field
-        label="产品卖点"
-        hint="一行一条，最多 8 条；每条 ≤ 60 字"
-      >
+      <Field label="产品卖点" hint="一行一条，最多 8 条；每条 ≤ 60 字">
         <textarea
           value={highlightsText}
           onChange={(e) => setHighlightsText(e.target.value)}
@@ -256,9 +251,7 @@ export function GenerateForm() {
             className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
           >
             {STYLES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
+              <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
         </Field>
@@ -269,13 +262,43 @@ export function GenerateForm() {
             className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
           >
             {PLATFORMS.map((p) => (
-              <option key={p.value} value={p.value}>
-                {p.label}
-              </option>
+              <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
         </Field>
       </div>
+
+      <section>
+        <div className="flex items-baseline justify-between mb-2">
+          <h2 className="text-sm font-medium">要生成哪些图？</h2>
+          <span className="text-xs text-zinc-500">已选 {selectedPanels.size}/{PANELS.length} · 预计消耗 {cost} 积分</span>
+        </div>
+        <ul className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {PANELS.map((p) => {
+            const on = selectedPanels.has(p.id);
+            return (
+              <li key={p.id}>
+                <label
+                  className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors ${
+                    on
+                      ? "border-zinc-900 dark:border-zinc-100 bg-zinc-900/5 dark:bg-zinc-100/5"
+                      : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={on}
+                    onChange={() => togglePanel(p.id)}
+                    className="accent-zinc-900 dark:accent-zinc-100"
+                  />
+                  <span>{p.label}</span>
+                  <span className="ml-auto text-xs text-zinc-500">{p.aspect}</span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
 
       {submitError && <p className="text-sm text-red-600">{submitError}</p>}
       <div className="pt-2">
@@ -309,15 +332,8 @@ function Dropzone({ disabled, onFiles }: { disabled: boolean; onFiles: (f: FileL
           ? "border-zinc-200 dark:border-zinc-800 text-zinc-400 cursor-not-allowed"
           : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500 text-zinc-600 dark:text-zinc-300 cursor-pointer"
       }`}
-      onDragOver={(e) => {
-        if (disabled) return;
-        e.preventDefault();
-      }}
-      onDrop={(e) => {
-        if (disabled) return;
-        e.preventDefault();
-        onFiles(e.dataTransfer.files);
-      }}
+      onDragOver={(e) => { if (!disabled) e.preventDefault(); }}
+      onDrop={(e) => { if (disabled) return; e.preventDefault(); onFiles(e.dataTransfer.files); }}
     >
       <input
         type="file"
@@ -325,10 +341,7 @@ function Dropzone({ disabled, onFiles }: { disabled: boolean; onFiles: (f: FileL
         multiple
         disabled={disabled}
         className="hidden"
-        onChange={(e) => {
-          onFiles(e.target.files);
-          e.target.value = ""; // allow re-selecting the same file
-        }}
+        onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }}
       />
       {disabled ? "已达上限（5 张）" : "拖拽图片到此处，或点击选择文件"}
     </label>

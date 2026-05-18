@@ -92,10 +92,13 @@ function mimeForFormat(fmt: OutputFormat | undefined): string {
  * Text-to-image (no reference). Returns the decoded image bytes.
  */
 export async function generateImage(input: GenerateInput): Promise<GenerateResult> {
+  const e = env();
+  if (e.STUB_IMAGE_MODEL === "1") {
+    return stubImage(input);
+  }
   if (input.referenceUrls?.length) {
     return editByUrl(input);
   }
-  const e = env();
   const size = input.size ?? "1024x1024";
   const sizeErr = validateSize(size);
   if (sizeErr) throw new Error(`Invalid size: ${sizeErr}`);
@@ -176,6 +179,40 @@ async function editByUrl(input: GenerateInput): Promise<GenerateResult> {
       outputTokens: json.usage?.output_tokens,
     },
   };
+}
+
+/**
+ * Stub generator for local smoke tests. Returns a small solid-color PNG
+ * deterministic from the prompt, so the worker can be exercised end-to-end
+ * without API spend. Only activated when STUB_IMAGE_MODEL=1.
+ */
+async function stubImage(input: GenerateInput): Promise<GenerateResult> {
+  // Test hook: include "FAIL_TEST" in any prompt to force a failure path —
+  // used to verify retry + refund logic without a real API. No-op in prod.
+  if (input.prompt.includes("FAIL_TEST")) {
+    throw new Error("stub injected failure (FAIL_TEST in prompt)");
+  }
+  const sharp = (await import("sharp")).default;
+  const h = simpleHash(input.prompt);
+  const r = (h & 0xff0000) >> 16;
+  const g = (h & 0x00ff00) >> 8;
+  const b = h & 0x0000ff;
+  const buf = await sharp({
+    create: { width: 256, height: 256, channels: 3, background: { r, g, b } },
+  })
+    .png()
+    .toBuffer();
+  return {
+    buffer: buf,
+    mimeType: "image/png",
+    revisedPrompt: "[STUB] " + input.prompt.slice(0, 80),
+  };
+}
+
+function simpleHash(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = (h * 33) ^ s.charCodeAt(i);
+  return h >>> 0;
 }
 
 function extractUsage(raw: unknown) {

@@ -10,7 +10,9 @@
     "prisma": "dotenv -e .env.local -- prisma",
     "db:migrate": "dotenv -e .env.local -- prisma migrate dev",
     "db:generate": "dotenv -e .env.local -- prisma generate",
-    "db:studio": "dotenv -e .env.local -- prisma studio"
+    "db:studio": "dotenv -e .env.local -- prisma studio",
+    "worker": "dotenv -e .env.local -- tsx watch src/worker.ts",
+    "worker:start": "dotenv -e .env.local -- tsx src/worker.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.2",

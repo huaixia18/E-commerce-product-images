@@ -13,6 +13,12 @@ const schema = z.object({
   ALIYUN_OSS_ACCESS_KEY_ID: z.string().min(1),
   ALIYUN_OSS_ACCESS_KEY_SECRET: z.string().min(1),
   ALIYUN_OSS_ENDPOINT: z.string().optional(),
+  /**
+   * When set to "1", imageClient.generateImage() returns a 1×1 colored PNG
+   * instead of calling gpt-image-2. Use for local smoke tests so the worker
+   * can be exercised end-to-end without API spend.
+   */
+  STUB_IMAGE_MODEL: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;

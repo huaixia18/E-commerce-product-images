@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 // Initial signup gift: keep small until pricing is finalized. Phase 5 will
 // move this into a config table.
-const SIGNUP_GIFT_CREDITS = 5;
+const SIGNUP_GIFT_CREDITS = 10;
 
 const schema = z.object({
   email: z.string().email(),
