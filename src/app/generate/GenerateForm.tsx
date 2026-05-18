@@ -19,8 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArrowRight, ImagePlus, Loader2, X, MoveLeft, MoveRight, Coins } from "lucide-react";
+import { ArrowRight, ImagePlus, Loader2, X, MoveLeft, MoveRight, Coins, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+interface SpecRow {
+  id: string;
+  label: string;
+  value: string;
+}
 
 interface Slot {
   id: string;
@@ -58,6 +64,7 @@ export function GenerateForm({ credits }: { credits: number }) {
   const [selectedPanels, setSelectedPanels] = useState<Set<PanelId>>(
     new Set(PANELS.map((p) => p.id)),
   );
+  const [specs, setSpecs] = useState<SpecRow[]>([]);
   const [submitting, startTransition] = useTransition();
 
   const doneSlots = slots.filter((s) => s.status === "done");
@@ -141,6 +148,17 @@ export function GenerateForm({ credits }: { credits: number }) {
       return next;
     });
   }
+  function addSpec() {
+    if (specs.length >= 8) return;
+    setSpecs((prev) => [...prev, { id: crypto.randomUUID(), label: "", value: "" }]);
+  }
+  function patchSpec(id: string, patch: Partial<SpecRow>) {
+    setSpecs((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+  }
+  function removeSpec(id: string) {
+    setSpecs((prev) => prev.filter((s) => s.id !== id));
+  }
+
   function togglePanel(p: PanelId) {
     setSelectedPanels((prev) => {
       const next = new Set(prev);
@@ -161,6 +179,10 @@ export function GenerateForm({ credits }: { credits: number }) {
     if (selectedPanels.size === 0) return toast.error("请至少选择一种要生成的图");
 
     const panels = PANELS.filter((p) => selectedPanels.has(p.id)).map((p) => p.id);
+    // Drop empty rows; the server also strips them, but clean data on the wire is nicer.
+    const cleanSpecs = specs
+      .map((s) => ({ label: s.label.trim(), value: s.value.trim() }))
+      .filter((s) => s.label && s.value);
 
     startTransition(async () => {
       const res = await fetch("/api/jobs", {
@@ -173,6 +195,7 @@ export function GenerateForm({ credits }: { credits: number }) {
           platform,
           sourceImageKeys,
           panels,
+          ...(cleanSpecs.length ? { specs: cleanSpecs } : {}),
         }),
       });
       if (!res.ok) {
@@ -305,6 +328,59 @@ export function GenerateForm({ credits }: { credits: number }) {
               placeholder={"24 小时续航\nIPX7 防水\n360° 立体声\n金属拉丝外壳"}
               className="font-mono text-sm"
             />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>
+                产品参数 <span className="text-xs text-muted-foreground">可选 · 最多 8 条，会出现在「参数卡」</span>
+              </Label>
+              {specs.length > 0 && (
+                <span className="text-xs text-muted-foreground tabular-nums">{specs.length}/8</span>
+              )}
+            </div>
+            {specs.length > 0 && (
+              <ul className="space-y-2">
+                {specs.map((s) => (
+                  <li key={s.id} className="flex items-center gap-2">
+                    <Input
+                      value={s.label}
+                      onChange={(e) => patchSpec(s.id, { label: e.target.value })}
+                      maxLength={20}
+                      placeholder="参数名（如：重量）"
+                      className="flex-[2]"
+                    />
+                    <Input
+                      value={s.value}
+                      onChange={(e) => patchSpec(s.id, { value: e.target.value })}
+                      maxLength={40}
+                      placeholder="参数值（如：350g）"
+                      className="flex-[3]"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeSpec(s.id)}
+                      aria-label="删除此参数"
+                    >
+                      <Trash2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={addSpec}
+              disabled={specs.length >= 8}
+              className="gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {specs.length === 0 ? "添加产品参数（可选）" : "再加一条"}
+            </Button>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">

@@ -106,6 +106,21 @@ export default async function JobPreviewPage({
                   ))}
                 </ul>
               </div>
+              {input.specs && input.specs.length > 0 && (
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">
+                    参数
+                  </div>
+                  <dl className="text-sm grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                    {input.specs.map((s, i) => (
+                      <div key={i} className="contents">
+                        <dt className="text-muted-foreground">{s.label}</dt>
+                        <dd className="font-medium">{s.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              )}
             </CardContent>
           </Card>
 

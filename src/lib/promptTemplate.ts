@@ -2,6 +2,11 @@
 // Phase 2: defines panel set + per-platform sizes + style/platform labels.
 // Phase 3: expands (JobInput, PanelId) into a concrete gpt-image-2 prompt.
 
+export interface JobSpec {
+  label: string; // e.g. "重量"
+  value: string; // e.g. "350g"
+}
+
 export interface JobInput {
   title: string;
   highlights: string[]; // 1-8 short bullets
@@ -11,6 +16,9 @@ export interface JobInput {
   sourceImageKeys: string[]; // 1-5
   /** Which panels the user wants to generate. Defaults to all. */
   panels?: PanelId[];
+  /** Optional structured product specs. Used primarily by the spec panel
+   *  and as secondary context in other panels. */
+  specs?: JobSpec[]; // 0-8
 }
 
 export type StyleId = "minimal" | "vivid" | "premium" | "warm";
@@ -125,9 +133,16 @@ export function expandPrompt(input: JobInput, panel: PanelId): ExpandedPrompt {
 
   const featIdx = featureIndex(panel);
 
+  // Build an optional "Product specs:" line that every panel sees, so the
+  // AI knows the form factor (e.g. "this is a 350g handheld device").
+  const specs = (input.specs ?? []).filter((s) => s.label.trim() && s.value.trim());
+  const specsLine = specs.length
+    ? `Product specs: ${specs.map((s) => `${s.label}: ${s.value}`).join("; ")}.`
+    : "";
+
   const base = `E-commerce detail image for product "${input.title}".
 Use the provided reference photo as the product's exact appearance — preserve shape, color, logo, and label.
-Style: ${styleDesc}.
+Style: ${styleDesc}.${specsLine ? `\n${specsLine}` : ""}
 Output a single image, no text watermark, no border.`;
 
   let panelBody: string;
@@ -138,9 +153,15 @@ Output a single image, no text watermark, no border.`;
     case "lifestyle":
       panelBody = `Lifestyle scene showing the product in realistic use. Convey: ${input.highlights.join("; ")}. Natural environment, human elements optional but never showing the user's face clearly.`;
       break;
-    case "spec":
-      panelBody = `Spec/parameter card: the product on a clean studio surface with subtle technical-blueprint accents. List these key specs as small in-image labels: ${input.highlights.slice(0, 4).join(" | ")}. Keep the typography minimal and legible.`;
+    case "spec": {
+      // Prefer structured specs when the user provided them; fall back to
+      // highlight bullets for the in-image labels.
+      const labels = specs.length
+        ? specs.slice(0, 6).map((s) => `${s.label}: ${s.value}`).join(" | ")
+        : input.highlights.slice(0, 4).join(" | ");
+      panelBody = `Spec/parameter card: the product on a clean studio surface with subtle technical-blueprint accents. List these key specs as small in-image labels: ${labels}. Keep the typography minimal and legible.`;
       break;
+    }
     default: {
       const idx = featIdx!;
       const hl = input.highlights[idx] ?? input.highlights[0];

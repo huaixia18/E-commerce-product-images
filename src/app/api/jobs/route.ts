@@ -21,6 +21,15 @@ const schema = z.object({
     .min(1)
     .max(PANEL_IDS.length)
     .optional(),
+  specs: z
+    .array(
+      z.object({
+        label: z.string().min(1).max(20),
+        value: z.string().min(1).max(40),
+      }),
+    )
+    .max(8)
+    .optional(),
 });
 
 export async function POST(req: Request) {
