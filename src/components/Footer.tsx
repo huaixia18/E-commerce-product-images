@@ -29,7 +29,7 @@ export function Footer() {
       </div>
       <div className="border-t border-border">
         <div className="mx-auto max-w-6xl px-6 py-4 text-xs text-muted-foreground flex items-center justify-between">
-          <span>© {new Date().getFullYear()} 详图AI</span>
+          <span>© {new Date().getFullYear()} 图作AI</span>
           <span>由 gpt-image-2 驱动</span>
         </div>
       </div>

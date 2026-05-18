@@ -13,7 +13,7 @@ import {
 } from "@/lib/promptTemplate";
 import { ChevronLeft } from "lucide-react";
 
-export const metadata = { title: "任务详情 · 详图AI" };
+export const metadata = { title: "任务详情 · 图作AI" };
 
 export default async function JobPreviewPage({
   params,

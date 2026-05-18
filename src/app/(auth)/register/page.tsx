@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RegisterForm } from "./RegisterForm";
 import { Logo } from "@/components/Logo";
 
-export const metadata = { title: "注册 · 详图AI" };
+export const metadata = { title: "注册 · 图作AI" };
 
 export default async function RegisterPage() {
   const session = await auth();

@@ -2,8 +2,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * Brand mark, matching the Vibrant Orange design pack:
- * a rounded square in primary orange showing the Chinese character "详".
- * Wordmark sits beside it.
+ * a rounded square in primary orange showing the Chinese character "图".
+ * Wordmark "图作AI" sits beside it.
  */
 export function Logo({
   className,
@@ -25,11 +25,11 @@ export function Logo({
           dims,
         )}
       >
-        详
+        图
       </span>
       {withWordmark && (
         <span className={cn("font-extrabold tracking-tight text-foreground", textCls)}>
-          详图<span className="text-primary">AI</span>
+          图作<span className="text-primary">AI</span>
         </span>
       )}
     </span>

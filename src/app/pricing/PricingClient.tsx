@@ -205,7 +205,7 @@ export function PricingClient({
               <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
                 支付即视为同意《用户协议》《充值条款》
                 <br />
-                积分仅可用于详图AI 服务 · 不可提现
+                积分仅可用于图作AI 服务 · 不可提现
               </p>
             </CardContent>
           </Card>

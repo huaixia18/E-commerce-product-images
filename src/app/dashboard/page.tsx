@@ -9,7 +9,7 @@ import { ALL_PANEL_IDS, type JobInput, type PanelId } from "@/lib/promptTemplate
 import { Sparkles, Wallet, Download, Image as ImageIcon, History, Plus, Bolt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const metadata = { title: "我的 · 详图AI" };
+export const metadata = { title: "我的 · 图作AI" };
 
 const TAB_LABELS = {
   projects: { label: "我的作品", icon: ImageIcon },

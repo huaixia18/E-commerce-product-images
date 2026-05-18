@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { LoginForm } from "./LoginForm";
 import { Logo } from "@/components/Logo";
 
-export const metadata = { title: "登录 · 详图AI" };
+export const metadata = { title: "登录 · 图作AI" };
 
 export default async function LoginPage({
   searchParams,

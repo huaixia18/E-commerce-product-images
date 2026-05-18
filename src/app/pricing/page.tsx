@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { PACKAGES, PACKAGE_ORDER } from "@/lib/payment/packages";
 import { PricingClient } from "./PricingClient";
 
-export const metadata = { title: "充值积分 · 详图AI" };
+export const metadata = { title: "充值积分 · 图作AI" };
 
 export default async function PricingPage() {
   const session = await auth();

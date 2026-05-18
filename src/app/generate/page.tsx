@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { GenerateForm } from "./GenerateForm";
 
-export const metadata = { title: "生成详情图 · 详图AI" };
+export const metadata = { title: "生成详情图 · 图作AI" };
 
 export default async function GeneratePage() {
   const session = await auth();
