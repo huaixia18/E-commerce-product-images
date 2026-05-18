@@ -10,32 +10,37 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LayoutDashboard, LogOut, Sparkles, Wallet } from "lucide-react";
+import { Sparkles, LogOut } from "lucide-react";
+import { prisma } from "@/lib/prisma";
 
 export async function Nav() {
   const session = await auth();
+  const credits = session?.user?.id
+    ? (await prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { credits: true },
+      }))?.credits ?? 0
+    : null;
+
   return (
-    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between gap-6">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+      <div className="mx-auto max-w-6xl px-6 h-16 flex items-center justify-between gap-6">
         <Link href="/" className="flex items-center">
           <Logo />
         </Link>
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="flex items-center gap-5 text-sm font-medium text-muted-foreground">
+          {!session?.user && (
+            <>
+              <Link href="#features" className="hover:text-foreground hidden sm:inline">产品</Link>
+              <Link href="/pricing" className="hover:text-foreground">定价</Link>
+              <Link href="/login" className="hover:text-foreground">登录</Link>
+            </>
+          )}
           {session?.user ? (
             <>
-              <Button asChild variant="ghost" size="sm" className="gap-1.5">
-                <Link href="/dashboard">
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span className="hidden sm:inline">控制台</span>
-                </Link>
-              </Button>
-              <Button asChild variant="ghost" size="sm" className="gap-1.5">
-                <Link href="/pricing">
-                  <Wallet className="h-4 w-4" />
-                  <span className="hidden sm:inline">充值</span>
-                </Link>
-              </Button>
-              <Button asChild size="sm" className="gap-1.5 ml-1">
+              <Link href="/dashboard" className="hover:text-foreground hidden sm:inline">控制台</Link>
+              <CreditChip credits={credits ?? 0} />
+              <Button asChild size="sm" className="gap-1.5 font-bold rounded-full px-4">
                 <Link href="/generate">
                   <Sparkles className="h-4 w-4" />
                   开始生成
@@ -44,17 +49,9 @@ export async function Nav() {
               <UserMenu email={session.user.email ?? ""} />
             </>
           ) : (
-            <>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/pricing">定价</Link>
-              </Button>
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/login">登录</Link>
-              </Button>
-              <Button asChild size="sm" className="ml-1">
-                <Link href="/register">免费试用</Link>
-              </Button>
-            </>
+            <Button asChild size="sm" className="gap-1.5 font-bold rounded-full px-4">
+              <Link href="/register">免费试用</Link>
+            </Button>
           )}
         </nav>
       </div>
@@ -62,14 +59,37 @@ export async function Nav() {
   );
 }
 
+function CreditChip({ credits }: { credits: number }) {
+  return (
+    <Link
+      href="/pricing"
+      className="hidden sm:inline-flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1.5 text-xs font-bold whitespace-nowrap hover:bg-secondary/80"
+    >
+      <CoinDot />
+      <span className="text-foreground">积分</span>
+      <strong className="text-primary tabular-nums">{credits}</strong>
+      <span className="ml-1 text-[10px] text-muted-foreground bg-background rounded px-1.5 py-0.5">+ 充值</span>
+    </Link>
+  );
+}
+
+function CoinDot() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="text-primary">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9 9h4a2 2 0 010 4H9zM9 15h5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 function UserMenu({ email }: { email: string }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="inline-flex h-9 w-9 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         aria-label="账户菜单"
       >
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-medium">
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand-purple text-white text-sm font-bold">
           {email.charAt(0).toUpperCase()}
         </span>
       </DropdownMenuTrigger>

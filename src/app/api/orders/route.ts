@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { getPackage } from "@/lib/payment/packages";
+import { getPackage, totalCredits } from "@/lib/payment/packages";
 import { paymentProvider } from "@/lib/payment/mockProvider";
 import { env } from "@/lib/env";
 
@@ -36,13 +36,14 @@ export async function POST(req: Request) {
   }
 
   // Create the Order row first (PENDING). We need its id as the provider's
-  // out_trade_no.
+  // out_trade_no. credits stored on the order is the grant total (base + bonus).
+  const credits = totalCredits(pkg);
   const order = await prisma.order.create({
     data: {
       userId: session.user.id,
       provider: parsed.data.channel === "wechat" ? "WECHAT" : "ALIPAY",
       amountCents: pkg.amountCents,
-      credits: pkg.credits,
+      credits,
       status: "PENDING",
     },
   });
@@ -53,7 +54,7 @@ export async function POST(req: Request) {
     outTradeNo: order.id,
     amountCents: pkg.amountCents,
     channel: parsed.data.channel,
-    subject: `${pkg.label} · ${pkg.credits} 积分`,
+    subject: `${pkg.label} · ${credits} 积分`,
     notifyUrl,
   });
 
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
     {
       id: order.id,
       amountCents: pkg.amountCents,
-      credits: pkg.credits,
+      credits,
       qrContent: result.qrContent,
       mockCompleteToken: result.mockCompleteToken,
     },

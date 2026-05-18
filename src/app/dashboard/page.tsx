@@ -2,13 +2,21 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Coins, Sparkles, Wallet, History, ArrowRight, ChevronRight } from "lucide-react";
+import { ALL_PANEL_IDS, type JobInput, type PanelId } from "@/lib/promptTemplate";
+import { Sparkles, Wallet, Download, Image as ImageIcon, History, Plus, Bolt } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const metadata = { title: "控制台 · 详图AI" };
+export const metadata = { title: "我的 · 详图AI" };
+
+const TAB_LABELS = {
+  projects: { label: "我的作品", icon: ImageIcon },
+  credits: { label: "积分明细", icon: Sparkles },
+  orders: { label: "充值记录", icon: History },
+  settings: { label: "账户设置", icon: Wallet },
+} as const;
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -22,7 +30,7 @@ export default async function DashboardPage() {
     prisma.job.findMany({
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
-      take: 8,
+      take: 12,
       select: { id: true, status: true, createdAt: true, creditsCost: true, inputJson: true },
     }),
     prisma.creditEntry.findMany({
@@ -37,143 +45,166 @@ export default async function DashboardPage() {
       _count: true,
     }),
   ]);
-
   if (!user) redirect("/login");
 
-  return (
-    <main className="flex-1 bg-muted/30">
-      <div className="mx-auto max-w-5xl px-6 py-10 space-y-8">
-        <header className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">你好，{user.name ?? user.email.split("@")[0]}</h1>
-            <p className="text-sm text-muted-foreground mt-1">{user.email}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button asChild variant="outline">
-              <Link href="/pricing">
-                <Wallet className="h-4 w-4 mr-1.5" />
-                充值
-              </Link>
-            </Button>
-            <Button asChild className="gap-2">
-              <Link href="/generate">
-                <Sparkles className="h-4 w-4" />
-                开始生成
-              </Link>
-            </Button>
-          </div>
-        </header>
+  const name = user.name ?? user.email.split("@")[0];
+  const totalImages = jobStats._sum.creditsCost ?? 0;
+  const totalJobs = jobStats._count;
 
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard
-            label="剩余积分"
-            value={user.credits.toString()}
-            icon={Coins}
-            accent="primary"
-            sub={
-              user.credits < 6 ? (
-                <Link href="/pricing" className="text-primary underline-offset-4 hover:underline">
+  return (
+    <main className="flex-1 bg-background">
+      <div className="mx-auto max-w-6xl px-6 py-8 grid grid-cols-1 lg:grid-cols-[240px_1fr] gap-6">
+        {/* SIDEBAR — user card + nav */}
+        <aside className="space-y-4">
+          <Card className="border-border">
+            <CardContent className="p-5 space-y-4">
+              <div className="flex items-center gap-3">
+                <span className="w-11 h-11 rounded-full bg-brand-purple text-white grid place-items-center font-bold text-lg">
+                  {name.charAt(0).toUpperCase()}
+                </span>
+                <div className="min-w-0">
+                  <div className="font-extrabold text-sm truncate">{name}</div>
+                  <div className="text-[11px] text-muted-foreground">普通会员</div>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-4 border-t border-border">
+                <div>
+                  <div className="text-[11px] text-muted-foreground">累计生成</div>
+                  <div className="text-base font-black mt-0.5 tabular-nums">{totalImages} 张</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-muted-foreground">任务数</div>
+                  <div className="text-base font-black mt-0.5 tabular-nums">{totalJobs}</div>
+                </div>
+              </div>
+              <Button asChild className="w-full rounded-full font-extrabold gap-1.5">
+                <Link href="/pricing">
+                  <Bolt className="h-4 w-4" />
                   立即充值
                 </Link>
-              ) : (
-                "1 积分 = 1 张图"
-              )
-            }
-          />
-          <StatCard
-            label="累计生成"
-            value={String(jobStats._sum.creditsCost ?? 0)}
-            icon={Sparkles}
-            accent="success"
-            sub={`${jobStats._count} 个任务`}
-          />
-          <StatCard
-            label="账户类型"
-            value="标准"
-            icon={Wallet}
-            accent="muted"
-            sub={`注册于 ${user.createdAt.toLocaleDateString("zh-CN")}`}
-          />
-        </section>
+              </Button>
+            </CardContent>
+          </Card>
 
+          <nav className="space-y-1">
+            {Object.entries(TAB_LABELS).map(([id, { label, icon: Icon }]) => (
+              <NavItem
+                key={id}
+                active={id === "projects"}
+                icon={<Icon className="h-4 w-4" />}
+                label={label}
+              />
+            ))}
+          </nav>
+        </aside>
+
+        {/* MAIN */}
         <section>
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-lg font-semibold">最近任务</h2>
-            <span className="text-xs text-muted-foreground">最近 8 条</span>
-          </div>
+          <header className="flex items-center justify-between mb-5">
+            <div>
+              <h1 className="text-2xl font-black tracking-tight">我的作品</h1>
+              <p className="text-xs text-muted-foreground mt-1">
+                共 {totalJobs} 个项目 · 累计 {totalImages} 张图 · 当前余额{" "}
+                <strong className="text-primary tabular-nums">{user.credits}</strong> 积分
+              </p>
+            </div>
+            <Button asChild className="rounded-full gap-1.5 font-bold">
+              <Link href="/generate">
+                <Plus className="h-3.5 w-3.5" />
+                新建项目
+              </Link>
+            </Button>
+          </header>
+
           {recentJobs.length === 0 ? (
-            <EmptyState
-              icon={Sparkles}
-              title="还没有任何任务"
-              desc="上传一张商品图，让 AI 给你出一整套详情图。"
-              cta={{ href: "/generate", label: "开始生成" }}
-            />
-          ) : (
-            <Card className="border-border/60 overflow-hidden">
-              <ul className="divide-y divide-border/60">
-                {recentJobs.map((j) => {
-                  const title = (j.inputJson as { title?: string } | null)?.title ?? "未命名任务";
-                  return (
-                    <li key={j.id}>
-                      <Link
-                        href={`/generate/${j.id}`}
-                        className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-muted/50 transition-colors"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="font-medium truncate">{title}</div>
-                          <div className="text-xs text-muted-foreground mt-0.5">
-                            {j.createdAt.toLocaleString("zh-CN")}
-                          </div>
-                        </div>
-                        <JobStatusPill status={j.status} />
-                        <span className="text-xs text-muted-foreground whitespace-nowrap tabular-nums hidden sm:inline">
-                          {j.creditsCost} 积分
-                        </span>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground flex-none" />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
+            <Card className="border-dashed border-border">
+              <CardContent className="p-12 text-center space-y-3">
+                <div className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+                <div className="font-bold">还没有任何项目</div>
+                <p className="text-sm text-muted-foreground">上传一张商品图，让 AI 给你出一整套详情图。</p>
+                <Button asChild className="rounded-full font-bold mt-2">
+                  <Link href="/generate">开始生成</Link>
+                </Button>
+              </CardContent>
             </Card>
-          )}
-        </section>
-
-        <section>
-          <div className="flex items-baseline justify-between mb-3">
-            <h2 className="text-lg font-semibold">积分流水</h2>
-            <span className="text-xs text-muted-foreground">最近 8 条</span>
-          </div>
-          {recentEntries.length === 0 ? (
-            <EmptyState
-              icon={History}
-              title="还没有积分变动"
-              desc="充值或开始生成后，你的积分流水会显示在这里。"
-            />
           ) : (
-            <Card className="border-border/60 overflow-hidden">
-              <ul className="divide-y divide-border/60">
-                {recentEntries.map((e) => (
-                  <li key={e.id} className="px-4 py-3 flex items-center justify-between gap-4 text-sm">
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium">{entryLabel(e.type)}</div>
-                      <div className="text-xs text-muted-foreground truncate mt-0.5">{e.note ?? "—"}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {recentJobs.map((j) => {
+                const input = j.inputJson as { title?: string; platform?: string; panels?: PanelId[] } | null;
+                const title = input?.title ?? "未命名任务";
+                const platform = input?.platform ?? "generic";
+                const panels = (input?.panels ?? ALL_PANEL_IDS) as PanelId[];
+                const count = panels.length;
+                return (
+                  <Link
+                    key={j.id}
+                    href={`/generate/${j.id}`}
+                    className="group block rounded-2xl border border-border bg-card overflow-hidden hover:border-primary/40 transition-colors"
+                  >
+                    <ProjectThumb panels={panels} />
+                    <div className="p-3 space-y-1.5">
+                      <div className="font-bold text-sm truncate">{title}</div>
+                      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                        <span>{j.createdAt.toLocaleString("zh-CN")}</span>
+                        <span className="bg-secondary text-foreground px-1.5 py-0.5 rounded font-semibold">
+                          {PLATFORM_DISPLAY[platform] ?? "通用"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between pt-2 border-t border-border">
+                        <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
+                          <ImageIcon className="h-3 w-3" />
+                          {count} 张
+                          <StatusInline status={j.status} />
+                        </span>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-primary">
+                          <Download className="h-3 w-3" />
+                          下载
+                        </span>
+                      </div>
                     </div>
-                    <span
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Credit ledger preview */}
+          {recentEntries.length > 0 && (
+            <div className="mt-10">
+              <header className="flex items-baseline justify-between mb-3">
+                <h2 className="text-lg font-extrabold">积分流水</h2>
+                <span className="text-[11px] text-muted-foreground">最近 8 条</span>
+              </header>
+              <Card className="border-border">
+                <CardContent className="p-0">
+                  {recentEntries.map((e, i) => (
+                    <div
+                      key={e.id}
                       className={cn(
-                        "font-semibold tabular-nums",
-                        e.amount > 0 ? "text-emerald-600" : "text-destructive",
+                        "grid grid-cols-[120px_80px_1fr_80px] items-center px-4 py-3 text-xs",
+                        i > 0 && "border-t border-border",
                       )}
                     >
-                      {e.amount > 0 ? `+${e.amount}` : e.amount}
-                    </span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap hidden sm:inline">
-                      {e.createdAt.toLocaleString("zh-CN")}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
+                      <span className="text-muted-foreground font-mono">
+                        {e.createdAt.toLocaleString("zh-CN")}
+                      </span>
+                      <span className="font-bold text-foreground">{entryLabel(e.type)}</span>
+                      <span className="text-muted-foreground truncate">{e.note ?? "—"}</span>
+                      <span
+                        className={cn(
+                          "text-right font-mono font-black tabular-nums",
+                          e.amount > 0 ? "text-success" : "text-foreground",
+                        )}
+                      >
+                        {e.amount > 0 ? `+${e.amount}` : e.amount}
+                      </span>
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            </div>
           )}
         </section>
       </div>
@@ -181,94 +212,62 @@ export default async function DashboardPage() {
   );
 }
 
-type AccentColor = "primary" | "success" | "muted";
-
-function StatCard({
-  label,
-  value,
-  icon: Icon,
-  accent,
-  sub,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-  accent: AccentColor;
-  sub?: React.ReactNode;
-}) {
-  const accentCls: Record<AccentColor, string> = {
-    primary: "bg-primary/10 text-primary",
-    success: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300",
-    muted: "bg-muted text-muted-foreground",
-  };
-  return (
-    <Card className="border-border/60">
-      <CardContent className="p-5 flex items-start gap-4">
-        <span className={cn("inline-flex h-10 w-10 items-center justify-center rounded-lg", accentCls[accent])}>
-          <Icon className="h-5 w-5" />
-        </span>
-        <div className="space-y-0.5 min-w-0 flex-1">
-          <div className="text-xs text-muted-foreground">{label}</div>
-          <div className="text-2xl font-bold tabular-nums">{value}</div>
-          {sub && <div className="text-xs text-muted-foreground truncate">{sub}</div>}
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function JobStatusPill({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string }> = {
-    PENDING: { label: "未开始", cls: "bg-muted text-muted-foreground" },
-    RUNNING: { label: "生成中", cls: "bg-primary/10 text-primary border-primary/20" },
-    SUCCEEDED: { label: "已完成", cls: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/40" },
-    PARTIAL: { label: "部分完成", cls: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/40" },
-    FAILED: { label: "失败", cls: "bg-destructive/10 text-destructive border-destructive/20" },
-  };
-  const m = map[status] ?? { label: status, cls: "bg-muted text-muted-foreground" };
-  return <Badge variant="outline" className={cn("text-[10px]", m.cls)}>{m.label}</Badge>;
-}
+const PLATFORM_DISPLAY: Record<string, string> = {
+  taobao: "淘宝",
+  tmall: "天猫",
+  jd: "京东",
+  amazon: "亚马逊",
+  generic: "通用",
+};
 
 function entryLabel(t: string): string {
   switch (t) {
     case "PURCHASE": return "充值";
     case "SPEND": return "消耗";
-    case "REFUND": return "退还";
+    case "REFUND": return "退分";
     case "ADMIN_ADJUST": return "调整";
     default: return t;
   }
 }
 
-function EmptyState({
-  icon: Icon,
-  title,
-  desc,
-  cta,
-}: {
-  icon: React.ComponentType<{ className?: string }>;
-  title: string;
-  desc: string;
-  cta?: { href: string; label: string };
-}) {
+function NavItem({ active, icon, label }: { active: boolean; icon: React.ReactNode; label: string }) {
   return (
-    <Card className="border-dashed border-border/60 bg-card/40">
-      <CardContent className="p-10 flex flex-col items-center text-center gap-3">
-        <span className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-          <Icon className="h-6 w-6" />
-        </span>
-        <div>
-          <div className="font-medium">{title}</div>
-          <div className="text-sm text-muted-foreground mt-1">{desc}</div>
-        </div>
-        {cta && (
-          <Button asChild variant="default" size="sm" className="mt-2 gap-1.5">
-            <Link href={cta.href}>
-              {cta.label}
-              <ArrowRight className="h-3.5 w-3.5" />
-            </Link>
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+    <div
+      className={cn(
+        "flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium",
+        active ? "bg-card text-foreground font-bold shadow-[0_2px_10px_rgba(26,18,8,0.06)]" : "text-muted-foreground",
+      )}
+    >
+      {icon}
+      <span className="flex-1">{label}</span>
+    </div>
+  );
+}
+
+function StatusInline({ status }: { status: string }) {
+  if (status === "PARTIAL") return <span className="text-warning ml-1">· 部分</span>;
+  if (status === "FAILED") return <span className="text-destructive ml-1">· 失败</span>;
+  if (status === "PENDING") return <span className="text-muted-foreground ml-1">· 待开始</span>;
+  if (status === "RUNNING") return <span className="text-primary ml-1">· 生成中</span>;
+  return null;
+}
+
+/** Mini puzzle thumbnail mirroring the main mosaic layout. */
+function ProjectThumb({ panels }: { panels: PanelId[] }) {
+  const PANEL_BG: Record<PanelId, string> = {
+    hero: "bg-primary",
+    feature_1: "bg-brand-magenta",
+    feature_2: "bg-brand-yellow",
+    feature_3: "bg-brand-mint",
+    lifestyle: "bg-brand-purple",
+    spec: "bg-card ring-1 ring-border",
+  };
+  const has = (p: PanelId) => panels.includes(p);
+  return (
+    <div className="h-32 bg-secondary p-1 grid grid-cols-3 grid-rows-2 gap-1">
+      <div className={cn("col-span-2 row-span-2 rounded-md", has("hero") ? PANEL_BG.hero : "border border-dashed border-border opacity-50")} />
+      <div className={cn("rounded-md", has("feature_1") ? PANEL_BG.feature_1 : "border border-dashed border-border opacity-50")} />
+      <div className={cn("rounded-md", has("feature_2") ? PANEL_BG.feature_2 : "border border-dashed border-border opacity-50")} />
+    </div>
   );
 }

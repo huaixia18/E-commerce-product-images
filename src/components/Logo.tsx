@@ -1,33 +1,37 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Brand mark + wordmark. The mark is a simple square gradient with a stylized
- * "stack" silhouette — evokes layered detail-page panels.
+ * Brand mark, matching the Vibrant Orange design pack:
+ * a rounded square in primary orange showing the Chinese character "详".
+ * Wordmark sits beside it.
  */
-export function Logo({ className, withWordmark = true }: { className?: string; withWordmark?: boolean }) {
+export function Logo({
+  className,
+  withWordmark = true,
+  size = "md",
+}: {
+  className?: string;
+  withWordmark?: boolean;
+  size?: "sm" | "md" | "lg";
+}) {
+  const dims = size === "sm" ? "h-7 w-7 text-sm" : size === "lg" ? "h-9 w-9 text-lg" : "h-8 w-8 text-base";
+  const textCls = size === "sm" ? "text-base" : size === "lg" ? "text-xl" : "text-lg";
   return (
     <span className={cn("inline-flex items-center gap-2", className)}>
-      <Mark />
+      <span
+        aria-hidden
+        className={cn(
+          "inline-flex items-center justify-center rounded-xl bg-primary text-primary-foreground font-black tracking-tighter shadow-[0_4px_14px_-2px_oklch(0.67_0.21_38_/_0.5)]",
+          dims,
+        )}
+      >
+        详
+      </span>
       {withWordmark && (
-        <span className="font-semibold tracking-tight text-foreground">
-          详图AI
+        <span className={cn("font-extrabold tracking-tight text-foreground", textCls)}>
+          详图<span className="text-primary">AI</span>
         </span>
       )}
-    </span>
-  );
-}
-
-function Mark() {
-  return (
-    <span
-      aria-hidden
-      className="relative inline-flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-accent shadow-sm ring-1 ring-primary/20"
-    >
-      <svg viewBox="0 0 16 16" className="h-4 w-4 text-primary-foreground" fill="currentColor">
-        <rect x="2" y="2" width="6" height="6" rx="1.2" opacity="0.85" />
-        <rect x="8" y="5" width="6" height="6" rx="1.2" opacity="0.55" />
-        <rect x="5" y="8" width="6" height="6" rx="1.2" />
-      </svg>
     </span>
   );
 }

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { Package } from "@/lib/payment/packages";
+import { totalCredits } from "@/lib/payment/packages";
 import {
   Dialog,
   DialogContent,
@@ -85,7 +86,7 @@ export function PayDialog({
         if (cancelled) return;
         if (d.status === "PAID") {
           setStatus("paid");
-          toast.success("支付成功", { description: `+${pkg.credits} 积分已到账` });
+          toast.success("支付成功", { description: `+${totalCredits(pkg)} 积分已到账` });
           setTimeout(onPaid, 1000);
           return;
         }
@@ -104,7 +105,7 @@ export function PayDialog({
       cancelled = true;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
-  }, [status, order, onPaid, pkg.credits]);
+  }, [status, order, onPaid, totalCredits(pkg)]);
 
   async function handleMockConfirm() {
     if (!order?.mockCompleteToken) return;
@@ -144,7 +145,7 @@ export function PayDialog({
             <span className="text-2xl font-bold text-foreground tabular-nums">
               ¥{(pkg.amountCents / 100).toFixed(2)}
             </span>
-            <span className="ml-2 text-muted-foreground">/ {pkg.credits} 积分</span>
+            <span className="ml-2 text-muted-foreground">/ {totalCredits(pkg)} 积分</span>
           </DialogDescription>
         </DialogHeader>
 
