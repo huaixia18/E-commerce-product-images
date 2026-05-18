@@ -1,7 +1,7 @@
 // Pricing packages. Amounts are in RMB cents. Source of truth for the
 // pricing page and order creation — never trust a client-supplied price.
 
-export type PackageId = "trial" | "starter" | "standard" | "value" | "pro" | "team";
+export type PackageId = "trial" | "standard" | "value";
 export type PayChannel = "wechat" | "alipay";
 
 export interface Package {
@@ -16,63 +16,43 @@ export interface Package {
   perCredit: string; // for display only
 }
 
-// Six-tier package ladder matching the Vibrant Orange design pack.
-// Prices in RMB cents. perCredit is shown read-only.
+// 3-tier "scheme B" — single API cost ≈ 0.055 元 / image; targeting
+// ~67% blended gross margin while keeping per-credit prices visually
+// attractive. Signup gift remains 10 credits (≈ 0.55 元 acquisition cost).
+//   入门 ¥9.9   / 50 积分            → 0.198 元/张 · 72% 毛利
+//   常用 ¥29.9  / 150 + 30 = 180 积分 → 0.166 元/张 · 67% 毛利
+//   划算 ¥49.9  / 250 + 75 = 325 积分 → 0.154 元/张 · 64% 毛利
 export const PACKAGES: Record<PackageId, Package> = {
   trial: {
     id: "trial",
     label: "入门",
-    amountCents: 600,
-    credits: 30,
-    perCredit: "0.20 元/积分",
-  },
-  starter: {
-    id: "starter",
-    label: "常用",
-    amountCents: 1900,
-    credits: 100,
-    bonusCredits: 5,
-    hot: true,
-    badge: "常用",
-    perCredit: "0.18 元/积分",
+    amountCents: 990,
+    credits: 50,
+    perCredit: "0.198 元/张",
   },
   standard: {
     id: "standard",
-    label: "热销",
-    amountCents: 4900,
-    credits: 300,
+    label: "常用",
+    amountCents: 2990,
+    credits: 150,
     bonusCredits: 30,
     hot: true,
-    badge: "热销",
-    perCredit: "0.15 元/积分",
+    badge: "推荐",
+    perCredit: "0.166 元/张",
   },
   value: {
     id: "value",
     label: "划算",
-    amountCents: 11900,
-    credits: 800,
-    bonusCredits: 120,
-    perCredit: "0.13 元/积分",
-  },
-  pro: {
-    id: "pro",
-    label: "专业",
-    amountCents: 26900,
-    credits: 2000,
-    bonusCredits: 400,
-    perCredit: "0.11 元/积分",
-  },
-  team: {
-    id: "team",
-    label: "团队",
-    amountCents: 59900,
-    credits: 5000,
-    bonusCredits: 1200,
-    perCredit: "0.10 元/积分",
+    amountCents: 4990,
+    credits: 250,
+    bonusCredits: 75,
+    hot: true,
+    badge: "省心",
+    perCredit: "0.154 元/张",
   },
 };
 
-export const PACKAGE_ORDER: PackageId[] = ["trial", "starter", "standard", "value", "pro", "team"];
+export const PACKAGE_ORDER: PackageId[] = ["trial", "standard", "value"];
 
 /** Total credits granted = base + bonus. */
 export function totalCredits(pkg: Package): number {
