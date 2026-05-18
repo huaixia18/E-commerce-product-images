@@ -27,12 +27,14 @@ export function JobView({
   initialStatus,
   panels,
   panelLabels,
+  panelAspects,
   credits,
 }: {
   jobId: string;
   initialStatus: Status;
   panels: PanelId[];
   panelLabels: Record<PanelId, string>;
+  panelAspects: Record<PanelId, string>;
   credits: number;
 }) {
   const router = useRouter();
@@ -41,10 +43,8 @@ export function JobView({
   const [startError, setStartError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Polling. Stops once the job reaches a terminal state.
   useEffect(() => {
     const terminal = (s: Status) => s === "SUCCEEDED" || s === "FAILED" || s === "PARTIAL";
-
     let cancelled = false;
 
     async function tick() {
@@ -54,21 +54,14 @@ export function JobView({
         const data = (await res.json()) as JobStatus;
         if (cancelled) return;
         setStatus(data);
-        if (terminal(data.status)) return; // stop polling
+        if (terminal(data.status)) return;
       } catch {
-        /* ignore transient errors and retry */
+        /* transient — retry */
       }
-      if (!cancelled) {
-        pollTimer.current = setTimeout(tick, POLL_MS);
-      }
+      if (!cancelled) pollTimer.current = setTimeout(tick, POLL_MS);
     }
 
-    // Only poll once we know the job has been started (or already running/done).
-    if (initialStatus !== "PENDING") {
-      tick();
-    } else if (status?.status === "RUNNING") {
-      tick();
-    }
+    if (initialStatus !== "PENDING" || status?.status === "RUNNING") tick();
 
     return () => {
       cancelled = true;
@@ -89,7 +82,6 @@ export function JobView({
         setStartError(body.error ?? "启动失败");
         return;
       }
-      // Kick the polling loop immediately by faking a RUNNING status.
       setStatus({
         id: jobId,
         status: "RUNNING",
@@ -103,6 +95,7 @@ export function JobView({
   const current = status?.status ?? initialStatus;
   const showStartButton = current === "PENDING";
   const isTerminal = current === "SUCCEEDED" || current === "FAILED" || current === "PARTIAL";
+  const hasAnyDone = (status?.panels ?? []).some((p) => p.state === "done");
   const cost = panels.length;
   const enoughCredits = credits >= cost;
 
@@ -113,10 +106,20 @@ export function JobView({
         <StatusBadge status={current} />
       </div>
 
-      <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {panels.map((p) => {
           const ps = status?.panels.find((x) => x.panel === p);
-          return <PanelCard key={p} label={panelLabels[p]} state={ps?.state ?? "pending"} url={ps?.url} />;
+          return (
+            <PanelCard
+              key={p}
+              jobId={jobId}
+              panel={p}
+              label={panelLabels[p]}
+              aspect={panelAspects[p]}
+              state={ps?.state ?? "pending"}
+              url={ps?.url}
+            />
+          );
         })}
       </ul>
 
@@ -140,11 +143,19 @@ export function JobView({
       )}
       {startError && <p className="text-sm text-red-600">{startError}</p>}
 
-      {isTerminal && current !== "FAILED" && (
-        <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 px-4 py-3 text-sm text-emerald-900 dark:text-emerald-200">
-          ✅ 生成完毕。
-          {current === "PARTIAL" && " 部分图未生成，已自动退还相应积分。"}
-          {" "}下载按钮将在 Phase 4 上线。
+      {isTerminal && hasAnyDone && (
+        <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 px-4 py-4 flex items-center justify-between gap-4">
+          <div className="text-sm text-emerald-900 dark:text-emerald-200">
+            ✅ 生成完毕。
+            {current === "PARTIAL" && " 部分图未生成，已自动退还相应积分。"}
+          </div>
+          <a
+            href={`/api/jobs/${jobId}/download`}
+            className="rounded-md bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 text-sm font-medium"
+            download
+          >
+            下载全部 (zip)
+          </a>
         </div>
       )}
       {current === "FAILED" && (
@@ -168,7 +179,21 @@ function StatusBadge({ status }: { status: Status }) {
   return <span className={`text-xs rounded-full px-2.5 py-0.5 ${m.cls}`}>{m.label}</span>;
 }
 
-function PanelCard({ label, state, url }: { label: string; state: PanelState; url?: string }) {
+function PanelCard({
+  jobId,
+  panel,
+  label,
+  aspect,
+  state,
+  url,
+}: {
+  jobId: string;
+  panel: PanelId;
+  label: string;
+  aspect: string;
+  state: PanelState;
+  url?: string;
+}) {
   const stateMap: Record<PanelState, { text: string; cls: string }> = {
     pending: { text: "排队中", cls: "text-zinc-500" },
     running: { text: "生成中…", cls: "text-blue-600" },
@@ -176,17 +201,35 @@ function PanelCard({ label, state, url }: { label: string; state: PanelState; ur
     failed: { text: "失败", cls: "text-red-600" },
   };
   const s = stateMap[state];
+  const aspectClass = aspect === "3:2" ? "aspect-[3/2]" : "aspect-square";
+
   return (
-    <div className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
-      <div className="aspect-square bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center">
+    <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
+      <div className={`${aspectClass} bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center relative`}>
         {state === "done" && url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={url} alt={label} className="w-full h-full object-cover" />
+          <>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={url} alt={label} className="w-full h-full object-cover" />
+            <a
+              href={`/api/jobs/${jobId}/panels/${panel}/download`}
+              className="absolute bottom-2 right-2 rounded-md bg-black/70 hover:bg-black/85 text-white text-[11px] px-2 py-1 backdrop-blur"
+              download
+            >
+              下载
+            </a>
+          </>
+        ) : state === "running" ? (
+          <div className="flex flex-col items-center gap-1.5 text-blue-600">
+            <span className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />
+            <span className="text-xs">生成中…</span>
+          </div>
+        ) : state === "pending" ? (
+          <div className="text-xs text-zinc-400">排队中</div>
         ) : (
-          <div className={`text-xs ${s.cls}`}>{state === "running" ? "⏳" : state === "pending" ? "…" : state === "failed" ? "✕" : ""}</div>
+          <div className="text-xs text-red-600">✕ 失败</div>
         )}
       </div>
-      <div className="px-3 py-2 flex items-center justify-between text-xs">
+      <div className="px-3 py-2 flex items-center justify-between text-xs border-t border-zinc-100 dark:border-zinc-800">
         <span>{label}</span>
         <span className={s.cls}>{s.text}</span>
       </div>

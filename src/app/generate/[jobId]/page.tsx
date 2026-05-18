@@ -39,6 +39,9 @@ export default async function JobPreviewPage({
   const panelLabels: Record<PanelId, string> = Object.fromEntries(
     PANELS.map((p) => [p.id, p.label]),
   ) as Record<PanelId, string>;
+  const panelAspects: Record<PanelId, string> = Object.fromEntries(
+    PANELS.map((p) => [p.id, p.aspect]),
+  ) as Record<PanelId, string>;
 
   return (
     <main className="flex-1 bg-zinc-50 dark:bg-zinc-950">
@@ -94,6 +97,7 @@ export default async function JobPreviewPage({
           initialStatus={job.status}
           panels={panels}
           panelLabels={panelLabels}
+          panelAspects={panelAspects}
           credits={user?.credits ?? 0}
         />
       </div>

@@ -18,7 +18,7 @@ export default async function DashboardPage() {
       where: { userId: session.user.id },
       orderBy: { createdAt: "desc" },
       take: 5,
-      select: { id: true, status: true, createdAt: true, creditsCost: true },
+      select: { id: true, status: true, createdAt: true, creditsCost: true, inputJson: true },
     }),
     prisma.creditEntry.findMany({
       where: { userId: session.user.id },
@@ -57,15 +57,25 @@ export default async function DashboardPage() {
           {recentJobs.length === 0 ? (
             <EmptyCard message="还没有生成记录。" />
           ) : (
-            <ul className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800">
-              {recentJobs.map((j) => (
-                <li key={j.id} className="px-4 py-3 flex items-center justify-between text-sm">
-                  <span className="font-mono text-xs text-zinc-500">{j.id.slice(0, 10)}</span>
-                  <span>{j.status}</span>
-                  <span className="text-zinc-500">{j.creditsCost} 积分</span>
-                  <span className="text-zinc-400 text-xs">{j.createdAt.toLocaleString("zh-CN")}</span>
-                </li>
-              ))}
+            <ul className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 divide-y divide-zinc-100 dark:divide-zinc-800 overflow-hidden">
+              {recentJobs.map((j) => {
+                const title = (j.inputJson as { title?: string } | null)?.title ?? "未命名任务";
+                return (
+                  <li key={j.id}>
+                    <Link
+                      href={`/generate/${j.id}`}
+                      className="px-4 py-3 flex items-center justify-between gap-4 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+                    >
+                      <span className="flex-1 truncate font-medium">{title}</span>
+                      <JobStatusPill status={j.status} />
+                      <span className="text-zinc-500 text-xs whitespace-nowrap">{j.creditsCost} 积分</span>
+                      <span className="text-zinc-400 text-xs whitespace-nowrap hidden sm:inline">
+                        {j.createdAt.toLocaleString("zh-CN")}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -101,6 +111,18 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-2xl font-semibold mt-1">{value}</div>
     </div>
   );
+}
+
+function JobStatusPill({ status }: { status: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    PENDING: { label: "未开始", cls: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
+    RUNNING: { label: "生成中", cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200" },
+    SUCCEEDED: { label: "完成", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" },
+    PARTIAL: { label: "部分完成", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" },
+    FAILED: { label: "失败", cls: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200" },
+  };
+  const m = map[status] ?? { label: status, cls: "bg-zinc-200 text-zinc-700" };
+  return <span className={`text-[10px] rounded-full px-2 py-0.5 whitespace-nowrap ${m.cls}`}>{m.label}</span>;
 }
 
 function EmptyCard({ message }: { message: string }) {
