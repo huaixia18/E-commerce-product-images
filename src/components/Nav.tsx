@@ -1,51 +1,102 @@
 import Link from "next/link";
 import { auth, signOut } from "@/auth";
+import { Logo } from "./Logo";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { LayoutDashboard, LogOut, Sparkles, Wallet } from "lucide-react";
 
 export async function Nav() {
   const session = await auth();
   return (
-    <header className="border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 backdrop-blur sticky top-0 z-10">
-      <div className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between">
-        <Link href="/" className="font-semibold">
-          电商详情图
+    <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="mx-auto max-w-6xl px-6 h-14 flex items-center justify-between gap-6">
+        <Link href="/" className="flex items-center">
+          <Logo />
         </Link>
-        <nav className="flex items-center gap-4 text-sm">
+        <nav className="flex items-center gap-1 text-sm">
           {session?.user ? (
             <>
-              <Link href="/dashboard" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                控制台
-              </Link>
-              <Link href="/pricing" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                充值
-              </Link>
-              <span className="text-zinc-400">|</span>
-              <span className="text-zinc-500 text-xs">{session.user.email}</span>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut({ redirectTo: "/" });
-                }}
-              >
-                <button type="submit" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                  退出
-                </button>
-              </form>
+              <Button asChild variant="ghost" size="sm" className="gap-1.5">
+                <Link href="/dashboard">
+                  <LayoutDashboard className="h-4 w-4" />
+                  <span className="hidden sm:inline">控制台</span>
+                </Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm" className="gap-1.5">
+                <Link href="/pricing">
+                  <Wallet className="h-4 w-4" />
+                  <span className="hidden sm:inline">充值</span>
+                </Link>
+              </Button>
+              <Button asChild size="sm" className="gap-1.5 ml-1">
+                <Link href="/generate">
+                  <Sparkles className="h-4 w-4" />
+                  开始生成
+                </Link>
+              </Button>
+              <UserMenu email={session.user.email ?? ""} />
             </>
           ) : (
             <>
-              <Link href="/pricing" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                价格
-              </Link>
-              <Link href="/login" className="text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100">
-                登录
-              </Link>
-              <Link href="/register" className="rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-3 py-1.5">
-                注册
-              </Link>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/pricing">定价</Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/login">登录</Link>
+              </Button>
+              <Button asChild size="sm" className="ml-1">
+                <Link href="/register">免费试用</Link>
+              </Button>
             </>
           )}
         </nav>
       </div>
     </header>
+  );
+}
+
+function UserMenu({ email }: { email: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        className="ml-1 inline-flex h-8 w-8 items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        aria-label="账户菜单"
+      >
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-medium">
+          {email.charAt(0).toUpperCase()}
+        </span>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="flex flex-col">
+          <span className="text-xs font-normal text-muted-foreground">已登录</span>
+          <span className="truncate font-medium">{email}</span>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href="/dashboard" />}>控制台</DropdownMenuItem>
+        <DropdownMenuItem render={<Link href="/pricing" />}>充值积分</DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <form
+          action={async () => {
+            "use server";
+            await signOut({ redirectTo: "/" });
+          }}
+        >
+          <button
+            type="submit"
+            className="w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-sm hover:bg-accent/40 text-left"
+          >
+            <LogOut className="h-4 w-4" />
+            退出登录
+          </button>
+        </form>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

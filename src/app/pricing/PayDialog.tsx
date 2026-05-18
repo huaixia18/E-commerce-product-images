@@ -1,7 +1,19 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import type { Package } from "@/lib/payment/packages";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CheckCircle2, Loader2 } from "lucide-react";
 
 type Status = "creating" | "waiting" | "paid" | "error";
 
@@ -32,7 +44,6 @@ export function PayDialog({
   const [mockConfirming, setMockConfirming] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Create the order once on mount.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -52,8 +63,10 @@ export function PayDialog({
         setStatus("waiting");
       } catch (e) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : "下单失败");
+        const msg = e instanceof Error ? e.message : "下单失败";
+        setError(msg);
         setStatus("error");
+        toast.error("下单失败", { description: msg });
       }
     })();
     return () => {
@@ -61,7 +74,6 @@ export function PayDialog({
     };
   }, [pkg.id, channel]);
 
-  // Poll order status while waiting.
   useEffect(() => {
     if (status !== "waiting" || !order) return;
     let cancelled = false;
@@ -73,7 +85,8 @@ export function PayDialog({
         if (cancelled) return;
         if (d.status === "PAID") {
           setStatus("paid");
-          setTimeout(onPaid, 800);
+          toast.success("支付成功", { description: `+${pkg.credits} 积分已到账` });
+          setTimeout(onPaid, 1000);
           return;
         }
         if (d.status === "FAILED") {
@@ -91,102 +104,116 @@ export function PayDialog({
       cancelled = true;
       if (pollTimer.current) clearTimeout(pollTimer.current);
     };
-  }, [status, order, onPaid]);
+  }, [status, order, onPaid, pkg.credits]);
 
   async function handleMockConfirm() {
     if (!order?.mockCompleteToken) return;
     setMockConfirming(true);
     try {
-      await fetch("/api/payments/notify", {
+      const res = await fetch("/api/payments/notify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token: order.mockCompleteToken }),
       });
-      // The poll loop will pick up the PAID status within ~2s.
+      if (!res.ok) {
+        toast.error("模拟支付失败");
+      }
     } finally {
       setMockConfirming(false);
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-sm rounded-lg bg-white dark:bg-zinc-900 p-6 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-semibold">{pkg.label}</h3>
-            <p className="text-sm text-zinc-500 mt-1">
-              ¥{(pkg.amountCents / 100).toFixed(2)} · {pkg.credits} 积分
-            </p>
-            <p className="text-xs text-zinc-400 mt-1">
-              {channel === "wechat" ? "微信支付" : "支付宝"} 扫码付款
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-700 text-xl leading-none"
-            aria-label="关闭"
-          >
-            ×
-          </button>
-        </div>
+  const channelLabel = channel === "wechat" ? "微信支付" : "支付宝";
 
-        <div className="rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 aspect-square flex items-center justify-center relative">
-          {status === "creating" && <div className="text-sm text-zinc-500">正在生成订单…</div>}
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="pr-8">
+          <DialogTitle className="text-lg flex items-center gap-2">
+            {pkg.label}
+            <Badge variant="outline" className="shrink-0 text-xs">
+              {channelLabel}
+            </Badge>
+          </DialogTitle>
+          <DialogDescription className="mt-1">
+            <span className="text-2xl font-bold text-foreground tabular-nums">
+              ¥{(pkg.amountCents / 100).toFixed(2)}
+            </span>
+            <span className="ml-2 text-muted-foreground">/ {pkg.credits} 积分</span>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="relative rounded-lg border border-dashed border-border bg-muted/30 aspect-square flex items-center justify-center overflow-hidden">
+          {status === "creating" && (
+            <div className="flex flex-col items-center gap-2 text-sm text-muted-foreground">
+              <Skeleton className="h-44 w-44" />
+            </div>
+          )}
           {status === "waiting" && order && (
             <>
               <MockQR seed={order.id} />
-              <div className="absolute bottom-2 inset-x-2 text-center">
-                <div className="text-[10px] text-zinc-400">Mock 二维码 · 仅用于演示</div>
+              <div className="absolute inset-x-0 bottom-2 text-center">
+                <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Mock 二维码 · 仅用于演示
+                </span>
               </div>
             </>
           )}
           {status === "paid" && (
-            <div className="text-sm text-emerald-600 font-medium">✅ 支付成功，正在跳转…</div>
+            <div className="flex flex-col items-center gap-3 text-emerald-600">
+              <CheckCircle2 className="h-12 w-12" />
+              <div className="text-sm font-medium">支付成功，正在跳转…</div>
+            </div>
           )}
           {status === "error" && (
-            <div className="text-sm text-red-600 text-center px-4">
-              {error ?? "出错了"}
-              <button
-                type="button"
-                onClick={onClose}
-                className="block mx-auto mt-3 text-xs underline text-zinc-500"
-              >
+            <div className="px-6 text-center space-y-3">
+              <div className="text-sm text-destructive">{error ?? "出错了"}</div>
+              <Button variant="outline" size="sm" onClick={onClose}>
                 关闭
-              </button>
+              </Button>
             </div>
           )}
         </div>
 
-        {status === "waiting" && order?.mockCompleteToken && (
-          <button
-            type="button"
-            onClick={handleMockConfirm}
-            disabled={mockConfirming}
-            className="w-full rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {mockConfirming ? "确认中…" : "我已付款（模拟）"}
-          </button>
+        {status === "waiting" && (
+          <div className="space-y-2 text-center">
+            <p className="text-sm text-muted-foreground">
+              {channel === "wechat" ? "打开微信扫一扫" : "打开支付宝扫一扫"}
+            </p>
+            {order?.mockCompleteToken && (
+              <Button onClick={handleMockConfirm} disabled={mockConfirming} className="w-full">
+                {mockConfirming ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    确认中…
+                  </>
+                ) : (
+                  "我已付款（模拟）"
+                )}
+              </Button>
+            )}
+          </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
-/**
- * Mock QR — deterministic 21×21 black/white grid from the order id.
- * Just visual filler. Never gets scanned.
- */
 function MockQR({ seed }: { seed: string }) {
-  const N = 21;
-  const cells: boolean[] = [];
+  const N = 25;
+  const cells: boolean[] = new Array(N * N).fill(false);
   let h = 5381;
   for (let i = 0; i < seed.length; i++) h = ((h * 33) ^ seed.charCodeAt(i)) >>> 0;
   for (let i = 0; i < N * N; i++) {
     h = ((h * 1103515245 + 12345) & 0x7fffffff) >>> 0;
-    cells.push(h % 2 === 0);
+    cells[i] = h % 3 === 0;
   }
-  // Position-detection-pattern corners for the QR look.
+  // Finder patterns at three corners
   function setFinder(cx: number, cy: number) {
     for (let y = 0; y < 7; y++) {
       for (let x = 0; x < 7; x++) {
@@ -199,23 +226,25 @@ function MockQR({ seed }: { seed: string }) {
   setFinder(0, 0);
   setFinder(N - 7, 0);
   setFinder(0, N - 7);
-  const size = 168;
+  const size = 192;
   const cell = size / N;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
-      <rect width={size} height={size} fill="white" />
-      {cells.map((on, i) =>
-        on ? (
-          <rect
-            key={i}
-            x={(i % N) * cell}
-            y={Math.floor(i / N) * cell}
-            width={cell}
-            height={cell}
-            fill="black"
-          />
-        ) : null,
-      )}
-    </svg>
+    <div className="rounded-md bg-white p-3 shadow-sm">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+        <rect width={size} height={size} fill="white" />
+        {cells.map((on, i) =>
+          on ? (
+            <rect
+              key={i}
+              x={(i % N) * cell}
+              y={Math.floor(i / N) * cell}
+              width={cell}
+              height={cell}
+              fill="#111827"
+            />
+          ) : null,
+        )}
+      </svg>
+    </div>
   );
 }

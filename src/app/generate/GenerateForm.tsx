@@ -2,8 +2,25 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { compressImage, TARGET_MIME } from "@/lib/clientImage";
 import { PANELS, type PanelId } from "@/lib/promptTemplate";
+import { PanelIllustration } from "@/components/PanelIllustration";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ArrowRight, ImagePlus, Loader2, X, MoveLeft, MoveRight, Coins } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface Slot {
   id: string;
@@ -31,7 +48,7 @@ const PLATFORMS = [
   { value: "amazon", label: "亚马逊" },
 ] as const;
 
-export function GenerateForm() {
+export function GenerateForm({ credits }: { credits: number }) {
   const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [title, setTitle] = useState("");
@@ -41,12 +58,14 @@ export function GenerateForm() {
   const [selectedPanels, setSelectedPanels] = useState<Set<PanelId>>(
     new Set(PANELS.map((p) => p.id)),
   );
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, startTransition] = useTransition();
 
   const doneSlots = slots.filter((s) => s.status === "done");
+  const uploading = slots.some((s) => s.status === "uploading");
+  const cost = selectedPanels.size;
   const canSubmit =
     !submitting &&
+    !uploading &&
     title.trim().length > 0 &&
     parseHighlights(highlightsText).length > 0 &&
     doneSlots.length > 0 &&
@@ -63,6 +82,7 @@ export function GenerateForm() {
         compressed = await compressImage(file);
       } catch {
         appendSlot({ id, previewUrl: "", width: 0, height: 0, bytes: 0, status: "error", error: "压缩失败" });
+        toast.error("图片压缩失败", { description: file.name });
         continue;
       }
       appendSlot({
@@ -77,15 +97,12 @@ export function GenerateForm() {
         const signRes = await fetch("/api/uploads/sign", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            files: [{ contentType: TARGET_MIME, size: compressed.bytes }],
-          }),
+          body: JSON.stringify({ files: [{ contentType: TARGET_MIME, size: compressed.bytes }] }),
         });
         if (!signRes.ok) throw new Error(`sign ${signRes.status}`);
         const signJson = (await signRes.json()) as { items: { ossKey: string; uploadUrl: string }[] };
         const item = signJson.items[0];
         if (!item) throw new Error("no signed url");
-
         const putRes = await fetch(item.uploadUrl, {
           method: "PUT",
           headers: { "Content-Type": TARGET_MIME },
@@ -94,7 +111,9 @@ export function GenerateForm() {
         if (!putRes.ok) throw new Error(`oss ${putRes.status}`);
         patchSlot(id, { status: "done", ossKey: item.ossKey });
       } catch (e) {
-        patchSlot(id, { status: "error", error: e instanceof Error ? e.message : "上传失败" });
+        const msg = e instanceof Error ? e.message : "上传失败";
+        patchSlot(id, { status: "error", error: msg });
+        toast.error("上传失败", { description: msg });
       }
     }
   }
@@ -133,23 +152,13 @@ export function GenerateForm() {
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setSubmitError(null);
     const sourceImageKeys = slots
       .filter((s) => s.status === "done" && s.ossKey)
       .map((s) => s.ossKey!);
-    if (sourceImageKeys.length === 0) {
-      setSubmitError("请至少上传一张商品图");
-      return;
-    }
+    if (sourceImageKeys.length === 0) return toast.error("请至少上传一张商品图");
     const highlights = parseHighlights(highlightsText);
-    if (highlights.length === 0) {
-      setSubmitError("请至少填写一条卖点");
-      return;
-    }
-    if (selectedPanels.size === 0) {
-      setSubmitError("请至少选择一种要生成的图");
-      return;
-    }
+    if (highlights.length === 0) return toast.error("请至少填写一条卖点");
+    if (selectedPanels.size === 0) return toast.error("请至少选择一种要生成的图");
 
     const panels = PANELS.filter((p) => selectedPanels.has(p.id)).map((p) => p.id);
 
@@ -168,7 +177,7 @@ export function GenerateForm() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setSubmitError(body.error ?? "提交失败");
+        toast.error("提交失败", { description: body.error });
         return;
       }
       const body = (await res.json()) as { id: string };
@@ -176,162 +185,250 @@ export function GenerateForm() {
     });
   }
 
-  const cost = selectedPanels.size;
-
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <section className="space-y-2">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-medium">商品图</h2>
-          <span className="text-xs text-zinc-500">
-            {slots.length}/{MAX_FILES} · 第一张为主图
-          </span>
-        </div>
-        <Dropzone disabled={slots.length >= MAX_FILES} onFiles={handleFiles} />
-        {slots.length > 0 && (
-          <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-3">
-            {slots.map((s, i) => (
-              <li
-                key={s.id}
-                className="relative rounded-md overflow-hidden border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 aspect-square"
-              >
-                {s.previewUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.previewUrl} alt="" className="w-full h-full object-cover" />
-                )}
-                <div className="absolute top-1 left-1 rounded bg-black/60 text-white text-[10px] px-1.5 py-0.5">
-                  {i === 0 ? "主图" : `参考 ${i}`}
-                </div>
-                <div className="absolute bottom-0 inset-x-0 bg-black/60 text-white text-[10px] px-1.5 py-1 flex items-center justify-between">
-                  <span>
-                    {s.status === "uploading" && "上传中…"}
-                    {s.status === "done" && `${s.width}×${s.height}`}
-                    {s.status === "error" && (s.error || "失败")}
-                  </span>
-                  <div className="flex items-center gap-1">
-                    <button type="button" onClick={() => moveSlot(s.id, -1)} disabled={i === 0} className="disabled:opacity-30">←</button>
-                    <button type="button" onClick={() => moveSlot(s.id, 1)} disabled={i === slots.length - 1} className="disabled:opacity-30">→</button>
-                    <button type="button" onClick={() => removeSlot(s.id)}>✕</button>
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <Field label="产品标题">
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          required
-          maxLength={80}
-          placeholder="例：便携蓝牙音箱 X1"
-          className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
-        />
-      </Field>
-
-      <Field label="产品卖点" hint="一行一条，最多 8 条；每条 ≤ 60 字">
-        <textarea
-          value={highlightsText}
-          onChange={(e) => setHighlightsText(e.target.value)}
-          required
-          rows={5}
-          placeholder={"24 小时续航\nIPX7 防水\n360° 立体声\n金属拉丝外壳"}
-          className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
-        />
-      </Field>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field label="风格">
-          <select
-            value={style}
-            onChange={(e) => setStyle(e.target.value as typeof style)}
-            className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
-          >
-            {STYLES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
-            ))}
-          </select>
-        </Field>
-        <Field label="目标平台">
-          <select
-            value={platform}
-            onChange={(e) => setPlatform(e.target.value as typeof platform)}
-            className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
-          >
-            {PLATFORMS.map((p) => (
-              <option key={p.value} value={p.value}>{p.label}</option>
-            ))}
-          </select>
-        </Field>
-      </div>
-
-      <section>
-        <div className="flex items-baseline justify-between mb-2">
-          <h2 className="text-sm font-medium">要生成哪些图？</h2>
-          <span className="text-xs text-zinc-500">已选 {selectedPanels.size}/{PANELS.length} · 预计消耗 {cost} 积分</span>
-        </div>
-        <ul className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {PANELS.map((p) => {
-            const on = selectedPanels.has(p.id);
-            return (
-              <li key={p.id}>
-                <label
-                  className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer transition-colors ${
-                    on
-                      ? "border-zinc-900 dark:border-zinc-100 bg-zinc-900/5 dark:bg-zinc-100/5"
-                      : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
-                  }`}
+      {/* Step 1: Upload */}
+      <Card className="border-border/60">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <StepNumber n={1} />
+                上传商品图
+              </CardTitle>
+              <CardDescription className="mt-1">最多 5 张 · 第一张是主图，其余作参考</CardDescription>
+            </div>
+            <Badge variant="outline" className="tabular-nums">
+              {slots.length}/{MAX_FILES}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Dropzone disabled={slots.length >= MAX_FILES} onFiles={handleFiles} />
+          {slots.length > 0 && (
+            <ul className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+              {slots.map((s, i) => (
+                <li
+                  key={s.id}
+                  className="relative rounded-lg overflow-hidden border border-border bg-muted aspect-square group"
                 >
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    onChange={() => togglePanel(p.id)}
-                    className="accent-zinc-900 dark:accent-zinc-100"
-                  />
-                  <span>{p.label}</span>
-                  <span className="ml-auto text-xs text-zinc-500">{p.aspect}</span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+                  {s.previewUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={s.previewUrl} alt="" className="w-full h-full object-cover" />
+                  )}
+                  <div className="absolute top-1.5 left-1.5">
+                    <Badge variant={i === 0 ? "default" : "secondary"} className="text-[10px]">
+                      {i === 0 ? "主图" : `参考 ${i}`}
+                    </Badge>
+                  </div>
+                  {s.status === "uploading" && (
+                    <div className="absolute inset-0 bg-background/70 flex items-center justify-center">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    </div>
+                  )}
+                  {s.status === "error" && (
+                    <div className="absolute inset-0 bg-destructive/90 flex items-center justify-center text-destructive-foreground text-xs px-2 text-center">
+                      {s.error || "失败"}
+                    </div>
+                  )}
+                  <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/80 to-transparent pt-6 pb-1.5 px-1.5 flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity">
+                    <span className="text-[10px] text-white">
+                      {s.status === "done" ? `${s.width}×${s.height}` : ""}
+                    </span>
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        onClick={() => moveSlot(s.id, -1)}
+                        disabled={i === 0}
+                        className="text-white/90 hover:text-white disabled:opacity-30 p-0.5"
+                        aria-label="上移"
+                      >
+                        <MoveLeft className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveSlot(s.id, 1)}
+                        disabled={i === slots.length - 1}
+                        className="text-white/90 hover:text-white disabled:opacity-30 p-0.5"
+                        aria-label="下移"
+                      >
+                        <MoveRight className="h-3 w-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeSlot(s.id)}
+                        className="text-white/90 hover:text-white p-0.5"
+                        aria-label="移除"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
-      {submitError && <p className="text-sm text-red-600">{submitError}</p>}
-      <div className="pt-2">
-        <button
-          type="submit"
-          disabled={!canSubmit}
-          className="rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-5 py-2.5 text-sm font-medium disabled:opacity-50"
-        >
-          {submitting ? "提交中…" : "下一步：预览"}
-        </button>
+      {/* Step 2: Product info */}
+      <Card className="border-border/60">
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <StepNumber n={2} />
+            产品信息
+          </CardTitle>
+          <CardDescription className="mt-1">告诉 AI 这是什么商品，有哪些卖点</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="title">产品标题</Label>
+            <Input
+              id="title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={80}
+              required
+              placeholder="例：便携蓝牙音箱 X1"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="highlights">
+              产品卖点 <span className="text-xs text-muted-foreground">一行一条，最多 8 条</span>
+            </Label>
+            <Textarea
+              id="highlights"
+              rows={5}
+              value={highlightsText}
+              onChange={(e) => setHighlightsText(e.target.value)}
+              required
+              placeholder={"24 小时续航\nIPX7 防水\n360° 立体声\n金属拉丝外壳"}
+              className="font-mono text-sm"
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>视觉风格</Label>
+              <Select value={style} onValueChange={(v) => setStyle(v as typeof style)}>
+                <SelectTrigger>
+                  <SelectValue>{STYLES.find((s) => s.value === style)?.label}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {STYLES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>目标平台</Label>
+              <Select value={platform} onValueChange={(v) => setPlatform(v as typeof platform)}>
+                <SelectTrigger>
+                  <SelectValue>{PLATFORMS.find((p) => p.value === platform)?.label}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {PLATFORMS.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Step 3: Panel picker */}
+      <Card className="border-border/60">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <StepNumber n={3} />
+                要生成哪些图？
+              </CardTitle>
+              <CardDescription className="mt-1">每张 1 积分 · 失败自动退款</CardDescription>
+            </div>
+            <Badge variant="secondary" className="tabular-nums">
+              已选 {selectedPanels.size}/{PANELS.length}
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ul className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {PANELS.map((p) => {
+              const on = selectedPanels.has(p.id);
+              return (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => togglePanel(p.id)}
+                    className={cn(
+                      "w-full text-left rounded-lg border overflow-hidden transition-all relative",
+                      on
+                        ? "border-primary ring-2 ring-primary/30 shadow-sm"
+                        : "border-border hover:border-primary/40",
+                    )}
+                  >
+                    <div className={p.aspect === "3:2" ? "aspect-[3/2]" : "aspect-square"}>
+                      <PanelIllustration panel={p.id} />
+                    </div>
+                    <div className="p-3 flex items-center justify-between">
+                      <span className="text-sm font-medium">{p.label}</span>
+                      <span className="text-xs text-muted-foreground">{p.aspect}</span>
+                    </div>
+                    {on && (
+                      <div className="absolute top-2 right-2 h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs">
+                        ✓
+                      </div>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </CardContent>
+      </Card>
+
+      {/* Sticky submit bar */}
+      <div className="sticky bottom-4 z-10">
+        <Card className="border-border/60 shadow-lg backdrop-blur bg-card/95">
+          <CardContent className="p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3 text-sm">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+                <Coins className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="text-xs text-muted-foreground">预计消耗</div>
+                <div className="font-semibold tabular-nums">
+                  {cost} 积分 <span className="text-muted-foreground font-normal">/ 余额 {credits}</span>
+                </div>
+              </div>
+            </div>
+            <Button type="submit" disabled={!canSubmit} size="lg" className="gap-2">
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              下一步：预览
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     </form>
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+function StepNumber({ n }: { n: number }) {
   return (
-    <label className="block">
-      <span className="block text-sm font-medium mb-1">{label}</span>
-      {children}
-      {hint && <span className="text-xs text-zinc-500 mt-1 block">{hint}</span>}
-    </label>
+    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-semibold tabular-nums">
+      {n}
+    </span>
   );
 }
 
 function Dropzone({ disabled, onFiles }: { disabled: boolean; onFiles: (f: FileList | null) => void }) {
   return (
     <label
-      className={`block rounded-lg border-2 border-dashed px-6 py-8 text-center text-sm transition-colors ${
+      className={cn(
+        "block rounded-lg border-2 border-dashed px-6 py-12 text-center transition-colors cursor-pointer",
         disabled
-          ? "border-zinc-200 dark:border-zinc-800 text-zinc-400 cursor-not-allowed"
-          : "border-zinc-300 dark:border-zinc-700 hover:border-zinc-400 dark:hover:border-zinc-500 text-zinc-600 dark:text-zinc-300 cursor-pointer"
-      }`}
+          ? "border-border bg-muted/30 text-muted-foreground cursor-not-allowed"
+          : "border-border hover:border-primary hover:bg-primary/5 text-foreground",
+      )}
       onDragOver={(e) => { if (!disabled) e.preventDefault(); }}
       onDrop={(e) => { if (disabled) return; e.preventDefault(); onFiles(e.dataTransfer.files); }}
     >
@@ -343,7 +440,11 @@ function Dropzone({ disabled, onFiles }: { disabled: boolean; onFiles: (f: FileL
         className="hidden"
         onChange={(e) => { onFiles(e.target.files); e.target.value = ""; }}
       />
-      {disabled ? "已达上限（5 张）" : "拖拽图片到此处，或点击选择文件"}
+      <ImagePlus className={cn("h-7 w-7 mx-auto mb-2", disabled ? "text-muted-foreground" : "text-primary")} />
+      <div className="text-sm font-medium">
+        {disabled ? "已达上限（5 张）" : "拖拽图片到此处，或点击选择文件"}
+      </div>
+      <div className="text-xs text-muted-foreground mt-1">JPG / PNG / WEBP · 单张最大 10MB</div>
     </label>
   );
 }

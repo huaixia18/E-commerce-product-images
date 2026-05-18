@@ -1,8 +1,24 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import type { PanelId } from "@/lib/promptTemplate";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  CheckCircle2,
+  Download,
+  Loader2,
+  Sparkles,
+  XCircle,
+  AlertTriangle,
+  Clock,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 type Status = "PENDING" | "RUNNING" | "SUCCEEDED" | "FAILED" | "PARTIAL";
 type PanelState = "pending" | "running" | "done" | "failed";
@@ -10,8 +26,6 @@ interface PanelStatus {
   panel: PanelId;
   state: PanelState;
   url?: string;
-  width?: number | null;
-  height?: number | null;
 }
 interface JobStatus {
   id: string;
@@ -40,7 +54,6 @@ export function JobView({
   const router = useRouter();
   const [status, setStatus] = useState<JobStatus | null>(null);
   const [starting, startTransition] = useTransition();
-  const [startError, setStartError] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -56,7 +69,7 @@ export function JobView({
         setStatus(data);
         if (terminal(data.status)) return;
       } catch {
-        /* transient — retry */
+        /* transient */
       }
       if (!cancelled) pollTimer.current = setTimeout(tick, POLL_MS);
     }
@@ -70,7 +83,6 @@ export function JobView({
   }, [jobId, initialStatus, status?.status]);
 
   function handleStart() {
-    setStartError(null);
     startTransition(async () => {
       const res = await fetch(`/api/jobs/${jobId}/start`, {
         method: "POST",
@@ -79,9 +91,10 @@ export function JobView({
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setStartError(body.error ?? "启动失败");
+        toast.error("启动失败", { description: body.error });
         return;
       }
+      toast.success("已开始生成", { description: `预扣 ${panels.length} 积分` });
       setStatus({
         id: jobId,
         status: "RUNNING",
@@ -100,86 +113,111 @@ export function JobView({
   const enoughCredits = credits >= cost;
 
   return (
-    <section className="space-y-4 border-t border-zinc-200 dark:border-zinc-800 pt-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium">生成进度</h2>
-        <StatusBadge status={current} />
-      </div>
+    <div className="space-y-4">
+      <Card className="border-border/60">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-medium">生成进度</h2>
+            <StatusBadge status={current} />
+          </div>
 
-      <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {panels.map((p) => {
-          const ps = status?.panels.find((x) => x.panel === p);
-          return (
-            <PanelCard
-              key={p}
-              jobId={jobId}
-              panel={p}
-              label={panelLabels[p]}
-              aspect={panelAspects[p]}
-              state={ps?.state ?? "pending"}
-              url={ps?.url}
-            />
-          );
-        })}
-      </ul>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {panels.map((p) => {
+              const ps = status?.panels.find((x) => x.panel === p);
+              return (
+                <PanelCard
+                  key={p}
+                  jobId={jobId}
+                  panel={p}
+                  label={panelLabels[p]}
+                  aspect={panelAspects[p]}
+                  state={ps?.state ?? "pending"}
+                  url={ps?.url}
+                />
+              );
+            })}
+          </ul>
+        </CardContent>
+      </Card>
 
       {showStartButton && (
-        <div className="rounded-md bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-4 py-4 flex items-center justify-between gap-4">
-          <div className="text-sm">
-            <div>预计消耗 <strong>{cost}</strong> 积分（剩余 {credits}）</div>
-            {!enoughCredits && (
-              <div className="text-red-600 text-xs mt-1">
-                积分不足，
-                <a href="/pricing" className="underline">立即充值</a>。
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <div className="text-sm">
+                预计消耗 <span className="font-semibold tabular-nums">{cost}</span> 积分
+                <span className="text-muted-foreground"> · 余额 {credits}</span>
               </div>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={starting || !enoughCredits}
-            className="rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 px-4 py-2 text-sm font-medium disabled:opacity-50"
-          >
-            {starting ? "启动中…" : "开始生成"}
-          </button>
-        </div>
+              {!enoughCredits && (
+                <div className="text-xs text-destructive mt-1">
+                  积分不足。{" "}
+                  <Link href="/pricing" className="underline">立即充值</Link>
+                </div>
+              )}
+            </div>
+            <Button onClick={handleStart} disabled={starting || !enoughCredits} size="lg" className="gap-2">
+              {starting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  启动中…
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4" />
+                  开始生成
+                </>
+              )}
+            </Button>
+          </CardContent>
+        </Card>
       )}
-      {startError && <p className="text-sm text-red-600">{startError}</p>}
 
       {isTerminal && hasAnyDone && (
-        <div className="rounded-md bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900 px-4 py-4 flex items-center justify-between gap-4">
-          <div className="text-sm text-emerald-900 dark:text-emerald-200">
-            ✅ 生成完毕。
-            {current === "PARTIAL" && " 部分图未生成，已自动退还相应积分。"}
-          </div>
-          <a
-            href={`/api/jobs/${jobId}/download`}
-            className="rounded-md bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 text-sm font-medium"
-            download
-          >
-            下载全部 (zip)
-          </a>
-        </div>
+        <Card className="border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-950/30">
+          <CardContent className="p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="text-sm">
+              <div className="font-medium text-emerald-900 dark:text-emerald-100 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4" />
+                {current === "SUCCEEDED" ? "全部生成完毕" : "部分生成完毕"}
+              </div>
+              {current === "PARTIAL" && (
+                <div className="text-xs text-emerald-800/70 dark:text-emerald-300/70 mt-0.5">
+                  未生成的部分已自动退还积分
+                </div>
+              )}
+            </div>
+            <Button asChild className="gap-2 bg-emerald-700 hover:bg-emerald-800">
+              <a href={`/api/jobs/${jobId}/download`} download>
+                <Download className="h-4 w-4" />
+                下载全部 (zip)
+              </a>
+            </Button>
+          </CardContent>
+        </Card>
       )}
+
       {current === "FAILED" && (
-        <div className="rounded-md bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 px-4 py-3 text-sm text-red-900 dark:text-red-200">
-          ❌ 全部失败，积分已退还。
-        </div>
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardContent className="p-5 text-sm flex items-center gap-2 text-destructive">
+            <XCircle className="h-5 w-5" />
+            全部生成失败，积分已退还。
+          </CardContent>
+        </Card>
       )}
-    </section>
+    </div>
   );
 }
 
 function StatusBadge({ status }: { status: Status }) {
   const map: Record<Status, { label: string; cls: string }> = {
-    PENDING: { label: "未开始", cls: "bg-zinc-200 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300" },
-    RUNNING: { label: "生成中", cls: "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200" },
-    SUCCEEDED: { label: "已完成", cls: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200" },
-    PARTIAL: { label: "部分完成", cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200" },
-    FAILED: { label: "失败", cls: "bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200" },
+    PENDING: { label: "未开始", cls: "bg-muted text-muted-foreground" },
+    RUNNING: { label: "生成中", cls: "bg-primary/10 text-primary border-primary/20" },
+    SUCCEEDED: { label: "已完成", cls: "bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/40" },
+    PARTIAL: { label: "部分完成", cls: "bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/40" },
+    FAILED: { label: "失败", cls: "bg-destructive/10 text-destructive border-destructive/20" },
   };
   const m = map[status];
-  return <span className={`text-xs rounded-full px-2.5 py-0.5 ${m.cls}`}>{m.label}</span>;
+  return <Badge variant="outline" className={cn("font-medium", m.cls)}>{m.label}</Badge>;
 }
 
 function PanelCard({
@@ -197,44 +235,47 @@ function PanelCard({
   state: PanelState;
   url?: string;
 }) {
-  const stateMap: Record<PanelState, { text: string; cls: string }> = {
-    pending: { text: "排队中", cls: "text-zinc-500" },
-    running: { text: "生成中…", cls: "text-blue-600" },
-    done: { text: "完成", cls: "text-emerald-600" },
-    failed: { text: "失败", cls: "text-red-600" },
-  };
-  const s = stateMap[state];
   const aspectClass = aspect === "3:2" ? "aspect-[3/2]" : "aspect-square";
 
   return (
-    <div className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 overflow-hidden">
-      <div className={`${aspectClass} bg-zinc-100 dark:bg-zinc-950 flex items-center justify-center relative`}>
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <div className={`${aspectClass} bg-muted flex items-center justify-center relative overflow-hidden`}>
         {state === "done" && url ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={url} alt={label} className="w-full h-full object-cover" />
             <a
               href={`/api/jobs/${jobId}/panels/${panel}/download`}
-              className="absolute bottom-2 right-2 rounded-md bg-black/70 hover:bg-black/85 text-white text-[11px] px-2 py-1 backdrop-blur"
+              className="absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-md bg-background/95 hover:bg-background text-foreground text-xs px-2.5 py-1 shadow-sm backdrop-blur border border-border/60 transition-colors"
               download
             >
+              <Download className="h-3 w-3" />
               下载
             </a>
           </>
         ) : state === "running" ? (
-          <div className="flex flex-col items-center gap-1.5 text-blue-600">
-            <span className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-xs">生成中…</span>
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <Skeleton className="absolute inset-0" />
+            <div className="relative flex flex-col items-center gap-1.5">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-xs font-medium">生成中…</span>
+            </div>
           </div>
         ) : state === "pending" ? (
-          <div className="text-xs text-zinc-400">排队中</div>
+          <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
+            <Clock className="h-5 w-5" />
+            <span className="text-xs">排队中</span>
+          </div>
         ) : (
-          <div className="text-xs text-red-600">✕ 失败</div>
+          <div className="flex flex-col items-center gap-1.5 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+            <span className="text-xs">失败</span>
+          </div>
         )}
       </div>
-      <div className="px-3 py-2 flex items-center justify-between text-xs border-t border-zinc-100 dark:border-zinc-800">
-        <span>{label}</span>
-        <span className={s.cls}>{s.text}</span>
+      <div className="px-3 py-2 flex items-center justify-between text-xs border-t border-border/60">
+        <span className="font-medium">{label}</span>
+        <span className="text-muted-foreground">{aspect}</span>
       </div>
     </div>
   );

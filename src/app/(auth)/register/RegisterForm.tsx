@@ -2,11 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 export function RegisterForm() {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -25,10 +30,11 @@ export function RegisterForm() {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body.error ?? "注册失败");
+        const msg = body.error ?? "注册失败";
+        setError(msg);
+        toast.error(msg);
         return;
       }
-      // Auto sign-in after register.
       const signinRes = await fetch("/api/auth/callback/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -39,6 +45,7 @@ export function RegisterForm() {
         }),
       });
       if (signinRes.ok) {
+        toast.success("欢迎加入", { description: "已送出 10 积分" });
         router.push("/dashboard");
         router.refresh();
       } else {
@@ -49,50 +56,37 @@ export function RegisterForm() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <Field label="昵称（可选）" name="name" type="text" autoComplete="nickname" />
-      <Field label="邮箱" name="email" type="email" required autoComplete="email" />
-      <Field
-        label="密码"
-        name="password"
-        type="password"
-        required
-        autoComplete="new-password"
-        minLength={8}
-        hint="至少 8 个字符"
-      />
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
-      >
-        {pending ? "处理中…" : "注册"}
-      </button>
+      <div className="space-y-2">
+        <Label htmlFor="name">昵称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
+        <Input id="name" name="name" type="text" autoComplete="nickname" placeholder="给自己起个名字" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="email">邮箱</Label>
+        <Input id="email" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="password">密码</Label>
+        <Input
+          id="password"
+          name="password"
+          type="password"
+          required
+          autoComplete="new-password"
+          minLength={8}
+          placeholder="至少 8 个字符"
+        />
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" className="w-full" disabled={pending}>
+        {pending ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            注册中…
+          </>
+        ) : (
+          "注册并获得 10 积分"
+        )}
+      </Button>
     </form>
-  );
-}
-
-function Field(props: {
-  label: string;
-  name: string;
-  type: string;
-  required?: boolean;
-  autoComplete?: string;
-  minLength?: number;
-  hint?: string;
-}) {
-  return (
-    <label className="block">
-      <span className="block text-sm font-medium mb-1">{props.label}</span>
-      <input
-        name={props.name}
-        type={props.type}
-        required={props.required}
-        autoComplete={props.autoComplete}
-        minLength={props.minLength}
-        className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-400"
-      />
-      {props.hint && <span className="text-xs text-zinc-500 mt-1 block">{props.hint}</span>}
-    </label>
   );
 }

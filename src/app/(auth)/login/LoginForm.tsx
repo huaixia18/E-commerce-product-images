@@ -3,6 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2 } from "lucide-react";
 
 export function LoginForm({ next }: { next: string }) {
   const router = useRouter();
@@ -18,7 +23,9 @@ export function LoginForm({ next }: { next: string }) {
     startTransition(async () => {
       const res = await signIn("credentials", { email, password, redirect: false });
       if (res?.error) {
-        setError("邮箱或密码不正确");
+        const msg = "邮箱或密码不正确";
+        setError(msg);
+        toast.error(msg);
         return;
       }
       router.push(next);
@@ -28,34 +35,25 @@ export function LoginForm({ next }: { next: string }) {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <label className="block">
-        <span className="block text-sm font-medium mb-1">邮箱</span>
-        <input
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
-        />
-      </label>
-      <label className="block">
-        <span className="block text-sm font-medium mb-1">密码</span>
-        <input
-          name="password"
-          type="password"
-          required
-          autoComplete="current-password"
-          className="w-full rounded-md border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2 text-sm"
-        />
-      </label>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full rounded-md bg-zinc-900 dark:bg-zinc-100 text-white dark:text-zinc-900 py-2 text-sm font-medium hover:opacity-90 disabled:opacity-50"
-      >
-        {pending ? "登录中…" : "登录"}
-      </button>
+      <div className="space-y-2">
+        <Label htmlFor="email">邮箱</Label>
+        <Input id="email" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="password">密码</Label>
+        <Input id="password" name="password" type="password" required autoComplete="current-password" placeholder="••••••••" />
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" className="w-full" disabled={pending}>
+        {pending ? (
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            登录中…
+          </>
+        ) : (
+          "登录"
+        )}
+      </Button>
     </form>
   );
 }
