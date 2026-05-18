@@ -1,12 +1,12 @@
 import OSS from "ali-oss";
 import { env } from "./env";
 
-let client: OSS | null = null;
+let _client: OSS | null = null;
 
 export function ossClient(): OSS {
-  if (client) return client;
+  if (_client) return _client;
   const e = env();
-  client = new OSS({
+  _client = new OSS({
     region: e.ALIYUN_OSS_REGION,
     accessKeyId: e.ALIYUN_OSS_ACCESS_KEY_ID,
     accessKeySecret: e.ALIYUN_OSS_ACCESS_KEY_SECRET,
@@ -14,16 +14,37 @@ export function ossClient(): OSS {
     endpoint: e.ALIYUN_OSS_ENDPOINT || undefined,
     secure: true,
   });
-  return client;
+  return _client;
 }
 
-export async function putObject(key: string, body: Buffer | NodeJS.ReadableStream, mime?: string) {
+export async function putObject(
+  key: string,
+  body: Buffer | NodeJS.ReadableStream,
+  mime?: string,
+) {
   return ossClient().put(key, body, {
     mime,
     headers: { "Cache-Control": "public, max-age=31536000, immutable" },
   });
 }
 
-export function signedUrl(key: string, expiresSeconds = 3600): string {
+/** Signed GET URL for reading an object (used to feed gpt-image-2 by URL). */
+export function signedGetUrl(key: string, expiresSeconds = 3600): string {
   return ossClient().signatureUrl(key, { expires: expiresSeconds });
+}
+
+/**
+ * Signed PUT URL for browser-direct upload. Caller PUTs the file body to this URL
+ * with the matching Content-Type. Bucket CORS must allow PUT from the app origin.
+ */
+export function signedPutUrl(
+  key: string,
+  contentType: string,
+  expiresSeconds = 600,
+): string {
+  return ossClient().signatureUrl(key, {
+    method: "PUT",
+    expires: expiresSeconds,
+    "Content-Type": contentType,
+  });
 }

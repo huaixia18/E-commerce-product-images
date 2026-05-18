@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 export default auth((req) => {
   const isAuthed = !!req.auth;
   const path = req.nextUrl.pathname;
-  const isProtected = path.startsWith("/dashboard");
+  const isProtected = path.startsWith("/dashboard") || path.startsWith("/generate");
   if (isProtected && !isAuthed) {
     const url = req.nextUrl.clone();
     url.pathname = "/login";
@@ -15,5 +15,5 @@ export default auth((req) => {
 });
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*", "/generate/:path*"],
 };
