@@ -39,6 +39,20 @@ model User {
   referralReceived  Referral?  @relation("Invitee")
 }
 
+// ─── Admin (independent auth, separate from User) ────────────────────────────
+// Admins log in through a dedicated /admin/login flow with their own session
+// cookie. There is no relation to User — preventing accidental privilege
+// escalation if a User session is ever leaked.
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 // ─── Referral / invitations ──────────────────────────────────────────────────
 // A row is created the moment an invited user successfully registers via a
 // `ref` code. Both sides receive credits as a side-effect inside the same
