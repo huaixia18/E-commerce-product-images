@@ -8,7 +8,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
 
-export function RegisterForm() {
+export function RegisterForm({
+  refCode,
+  totalGift = 10,
+}: {
+  refCode?: string;
+  totalGift?: number;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -17,11 +23,14 @@ export function RegisterForm() {
     e.preventDefault();
     setError(null);
     const fd = new FormData(e.currentTarget);
-    const payload = {
+    const payload: Record<string, string> = {
       email: String(fd.get("email") ?? ""),
       password: String(fd.get("password") ?? ""),
-      name: String(fd.get("name") ?? "") || undefined,
     };
+    const name = String(fd.get("name") ?? "");
+    if (name) payload.name = name;
+    if (refCode) payload.ref = refCode;
+
     startTransition(async () => {
       const res = await fetch("/api/auth/register", {
         method: "POST",
@@ -35,6 +44,7 @@ export function RegisterForm() {
         toast.error(msg);
         return;
       }
+      const body = (await res.json()) as { credits: number; referralApplied?: boolean; referralRejected?: string };
       const signinRes = await fetch("/api/auth/callback/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -45,7 +55,13 @@ export function RegisterForm() {
         }),
       });
       if (signinRes.ok) {
-        toast.success("欢迎加入", { description: "已送出 10 积分" });
+        if (body.referralApplied) {
+          toast.success("欢迎加入", { description: `+${body.credits} 积分已到账（含邀请奖励）` });
+        } else if (body.referralRejected) {
+          toast.success("欢迎加入", { description: `+${body.credits} 积分已到账 · 邀请码未生效` });
+        } else {
+          toast.success("欢迎加入", { description: `已送出 ${body.credits} 积分` });
+        }
         router.push("/dashboard");
         router.refresh();
       } else {
@@ -77,14 +93,14 @@ export function RegisterForm() {
         />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" className="w-full" disabled={pending}>
+      <Button type="submit" className="w-full rounded-full font-extrabold" disabled={pending}>
         {pending ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
             注册中…
           </>
         ) : (
-          "注册并获得 10 积分"
+          `注册并获得 ${totalGift} 积分`
         )}
       </Button>
     </form>

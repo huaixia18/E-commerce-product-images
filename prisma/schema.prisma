@@ -23,6 +23,8 @@ model User {
   image         String?
   emailVerified DateTime?
   credits       Int       @default(0) // current spendable balance
+  /** Shareable invitation code. Stable, indexed for ?ref= lookup. */
+  referralCode  String    @unique @default(cuid())
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -31,6 +33,42 @@ model User {
   jobs            Job[]
   orders          Order[]
   creditEntries   CreditEntry[]
+  /** People this user has successfully referred. */
+  referralsSent     Referral[] @relation("Referrer")
+  /** The single Referral row where this user was the invitee, if any. */
+  referralReceived  Referral?  @relation("Invitee")
+}
+
+// ─── Referral / invitations ──────────────────────────────────────────────────
+// A row is created the moment an invited user successfully registers via a
+// `ref` code. Both sides receive credits as a side-effect inside the same
+// transaction. `inviteeId` is unique → enforces "one user can only be invited
+// once". Rejected attempts (same IP, disposable email, etc) never reach this
+// table; they short-circuit at the register endpoint.
+
+enum ReferralStatus {
+  GRANTED
+  REVOKED // reserved for admin / manual fraud action
+}
+
+model Referral {
+  id          String         @id @default(cuid())
+  referrerId  String
+  inviteeId   String         @unique
+  status      ReferralStatus @default(GRANTED)
+  /** Credits granted to each party at signup time, snapshotted. */
+  referrerReward Int
+  inviteeReward  Int
+  /** Snapshot of the invitee's signup IP — for audits. */
+  inviteeIp   String?
+  /** Snapshot of the invitee's device fingerprint hash. */
+  inviteeFp   String?
+  createdAt   DateTime       @default(now())
+
+  referrer User @relation("Referrer", fields: [referrerId], references: [id], onDelete: Cascade)
+  invitee  User @relation("Invitee",  fields: [inviteeId],  references: [id], onDelete: Cascade)
+
+  @@index([referrerId, createdAt])
 }
 
 model Account {

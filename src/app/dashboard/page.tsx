@@ -5,9 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ALL_PANEL_IDS, type JobInput, type PanelId } from "@/lib/promptTemplate";
+import { ALL_PANEL_IDS, type PanelId } from "@/lib/promptTemplate";
 import { Sparkles, Wallet, Download, Image as ImageIcon, History, Plus, Bolt } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { headers } from "next/headers";
+import { InvitePanel } from "@/components/InvitePanel";
 
 export const metadata = { title: "我的 · 图作AI" };
 
@@ -22,10 +24,10 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session?.user?.id) redirect("/login");
 
-  const [user, recentJobs, recentEntries, jobStats] = await Promise.all([
+  const [user, recentJobs, recentEntries, jobStats, referrals] = await Promise.all([
     prisma.user.findUnique({
       where: { id: session.user.id },
-      select: { email: true, name: true, credits: true, createdAt: true },
+      select: { email: true, name: true, credits: true, createdAt: true, referralCode: true },
     }),
     prisma.job.findMany({
       where: { userId: session.user.id },
@@ -44,12 +46,24 @@ export default async function DashboardPage() {
       _sum: { creditsCost: true },
       _count: true,
     }),
+    prisma.referral.aggregate({
+      where: { referrerId: session.user.id, status: "GRANTED" },
+      _sum: { referrerReward: true },
+      _count: true,
+    }),
   ]);
   if (!user) redirect("/login");
 
   const name = user.name ?? user.email.split("@")[0];
   const totalImages = jobStats._sum.creditsCost ?? 0;
   const totalJobs = jobStats._count;
+
+  // Derive the public site origin so the referral link works on whichever
+  // host the user is hitting (localhost, prod domain, etc).
+  const hdrs = await headers();
+  const proto = hdrs.get("x-forwarded-proto") ?? "http";
+  const host = hdrs.get("host") ?? "localhost:3000";
+  const origin = `${proto}://${host}`;
 
   return (
     <main className="flex-1 bg-background">
@@ -96,6 +110,13 @@ export default async function DashboardPage() {
               />
             ))}
           </nav>
+
+          <InvitePanel
+            referralCode={user.referralCode}
+            origin={origin}
+            invitedCount={referrals._count}
+            earnedCredits={referrals._sum.referrerReward ?? 0}
+          />
         </aside>
 
         {/* MAIN */}
