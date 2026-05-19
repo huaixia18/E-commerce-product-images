@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { ChevronLeft, ShieldCheck } from "lucide-react";
 import { NameForm } from "./NameForm";
 import { PasswordForm } from "./PasswordForm";
+import { EmailChangeDialog } from "./EmailChangeDialog";
 
 export const metadata = { title: "账号设置 · 图作AI" };
 
@@ -58,6 +59,7 @@ export default async function SettingsPage() {
               ) : (
                 <Badge variant="outline" className="border-warning/40 text-warning">未验证</Badge>
               )}
+              <EmailChangeDialog currentEmail={user.email} />
             </Row>
             <Row label="昵称">{user.name ?? "—"}</Row>
             <Row label="积分余额">

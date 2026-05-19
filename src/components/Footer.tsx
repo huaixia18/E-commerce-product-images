@@ -20,10 +20,12 @@ export function Footer() {
           </ul>
         </div>
         <div className="space-y-2">
-          <h4 className="font-extrabold">支持</h4>
+          <h4 className="font-extrabold">支持与法律</h4>
           <ul className="space-y-1.5 text-muted-foreground">
             <li><Link href="/login" className="hover:text-foreground">登录</Link></li>
             <li><Link href="/register" className="hover:text-foreground">注册</Link></li>
+            <li><Link href="/terms" className="hover:text-foreground">用户协议</Link></li>
+            <li><Link href="/privacy" className="hover:text-foreground">隐私政策</Link></li>
           </ul>
         </div>
       </div>

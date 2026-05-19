@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ export function RegisterForm({
   const [codeSent, setCodeSent] = useState(false);
   const [cooldown, setCooldown] = useState(0);
   const [email, setEmail] = useState("");
+  const [agreed, setAgreed] = useState(false);
 
   // Tick the resend cooldown.
   useEffect(() => {
@@ -60,6 +62,10 @@ export function RegisterForm({
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    if (!agreed) {
+      setError("请先阅读并勾选《用户协议》与《隐私政策》");
+      return;
+    }
     const fd = new FormData(e.currentTarget);
     const code = String(fd.get("code") ?? "").trim();
     if (!/^\d{6}$/.test(code)) {
@@ -194,9 +200,32 @@ export function RegisterForm({
         />
       </div>
 
+      <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          className="mt-0.5 h-3.5 w-3.5 accent-primary cursor-pointer"
+        />
+        <span>
+          我已阅读并同意
+          <Link href="/terms" target="_blank" className="text-primary hover:underline mx-0.5">
+            《用户协议》
+          </Link>
+          与
+          <Link href="/privacy" target="_blank" className="text-primary hover:underline mx-0.5">
+            《隐私政策》
+          </Link>
+        </span>
+      </label>
+
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <Button type="submit" className="w-full rounded-full font-extrabold" disabled={pending}>
+      <Button
+        type="submit"
+        className="w-full rounded-full font-extrabold"
+        disabled={pending || !agreed}
+      >
         {pending ? (
           <>
             <Loader2 className="h-4 w-4 mr-2 animate-spin" />

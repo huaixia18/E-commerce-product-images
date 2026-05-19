@@ -47,6 +47,7 @@ model User {
 enum EmailVerificationPurpose {
   REGISTER
   PASSWORD_RESET
+  EMAIL_CHANGE
 }
 
 model EmailVerification {
