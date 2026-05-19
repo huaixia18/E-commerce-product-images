@@ -22,6 +22,8 @@ model User {
   name          String?
   image         String?
   emailVerified DateTime?
+  /** When the user accepted the TOS + privacy policy on signup. */
+  termsAgreedAt DateTime?
   credits       Int       @default(0) // current spendable balance
   /** Shareable invitation code. Stable, indexed for ?ref= lookup. */
   referralCode  String    @unique @default(cuid())

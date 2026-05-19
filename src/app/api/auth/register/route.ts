@@ -23,6 +23,14 @@ const schema = z.object({
   code: z.string().regex(/^\d{6}$/, "请输入 6 位数字验证码"),
   /** Referrer's referralCode pulled from /register?ref=... */
   ref: z.string().min(1).max(64).optional(),
+  /**
+   * Must be true. The client-side checkbox is just UX; this server-side
+   * gate is what gives us actual evidence the user agreed (recorded as
+   * termsAgreedAt on the User row).
+   */
+  agreedToTerms: z.literal(true, {
+    message: "请同意《用户协议》与《隐私政策》后再注册",
+  }),
 });
 
 const MAX_VERIFY_ATTEMPTS = 5;
@@ -132,8 +140,16 @@ export async function POST(req: Request) {
       where: { id: verification.id },
       data: { consumedAt: new Date() },
     });
+    const now = new Date();
     const u = await tx.user.create({
-      data: { email, name, passwordHash, credits: totalGift, emailVerified: new Date() },
+      data: {
+        email,
+        name,
+        passwordHash,
+        credits: totalGift,
+        emailVerified: now,
+        termsAgreedAt: now,
+      },
     });
     await tx.creditEntry.create({
       data: {

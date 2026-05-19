@@ -51,9 +51,18 @@ export function aliyunProvider(): EmailProvider {
       //     Subject: `【${fromAlias}】${input.purposeLabel}验证码`,
       //     HtmlBody: renderTemplate(input),
       //   });
+      //
+      // Until that lands, we *loud-fail* so callers (send-code, send-reset-code,
+      // account/email/send-code) surface "发送失败" to the user instead of
+      // silently dropping their verification code on the floor.
       void fromAlias;
-      // eslint-disable-next-line no-console
-      console.log(`[email/aliyun TODO] would send to ${input.to}: ${input.code}`);
+      void input;
+      throw new Error(
+        "Aliyun DirectMail provider is not implemented yet. " +
+          "Set EMAIL_PROVIDER=console for local development or finish " +
+          "the SDK integration in src/lib/email/aliyunProvider.ts before " +
+          "going to production.",
+      );
     },
   };
 }

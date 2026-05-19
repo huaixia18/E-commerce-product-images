@@ -72,10 +72,11 @@ export function RegisterForm({
       setError("请输入 6 位数字验证码");
       return;
     }
-    const payload: Record<string, string> = {
+    const payload: Record<string, string | boolean> = {
       email: email.trim(),
       code,
       password: String(fd.get("password") ?? ""),
+      agreedToTerms: true,
     };
     const name = String(fd.get("name") ?? "").trim();
     if (name) payload.name = name;
@@ -103,8 +104,8 @@ export function RegisterForm({
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({
-          email: payload.email,
-          password: payload.password,
+          email: String(payload.email),
+          password: String(payload.password),
           redirect: "false",
         }),
       });

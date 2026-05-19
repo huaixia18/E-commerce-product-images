@@ -124,34 +124,67 @@ async function finalizeIfDone(jobId: string) {
   else if (produced === 0) status = "FAILED";
   else status = "PARTIAL";
 
-  // Refund unused credits. 1 panel = 1 credit. creditsCost was pre-deducted
-  // on Start as `total`. Refund (total - produced).
-  const refund = total - produced;
+  // Compute how much we still owe the user back. Refund cap is the original
+  // amount they paid (sum of SPEND entries on this job — survives even if
+  // creditsCost was tampered with). Anything we've already refunded for this
+  // job (worker auto-refund or admin goodwill) counts toward the cap.
+  //
+  // Important: this is what enables admin "retry" of a previously-finalized
+  // PARTIAL/FAILED job to work safely. After the first finalize refunded
+  // N missing panels, retrying and producing them must NOT also be paid for
+  // by the user — but neither should we double-refund. The math here keeps
+  // the user's net debit equal to `produced` regardless of how many times
+  // finalize runs.
+  const [spendRows, refundRows] = await Promise.all([
+    prisma.creditEntry.findMany({
+      where: { jobId, type: "SPEND" },
+      select: { amount: true },
+    }),
+    prisma.creditEntry.findMany({
+      where: { jobId, type: "REFUND" },
+      select: { amount: true },
+    }),
+  ]);
+  const totalSpent = spendRows.reduce((s, r) => s + Math.max(0, -r.amount), 0);
+  const alreadyRefunded = refundRows.reduce(
+    (s, r) => s + Math.max(0, r.amount),
+    0,
+  );
+  // Target net debit = produced panels. Refund whatever balances that out.
+  const targetRefund = Math.max(0, totalSpent - produced - alreadyRefunded);
 
-  // Atomic state transition: only the first finalize call wins. Concurrent
-  // panel completions racing here would otherwise double-refund.
+  // Atomic state transition: only the first finalize call wins for a given
+  // RUNNING window. (Retry resets status to RUNNING which intentionally
+  // re-opens this guard — the refund computation above is idempotent so a
+  // second finalize either adds nothing or tops up to the correct cap.)
   await prisma.$transaction(async (tx) => {
     const claim = await tx.job.updateMany({
       where: { id: jobId, status: "RUNNING" },
       data: {
         status,
         finishedAt: new Date(),
-        creditsCost: produced,
+        // creditsCost is intentionally NOT overwritten here. It stays equal
+        // to whatever /start charged (or 0 if never started). Admin tools
+        // and the dashboard rely on this being a stable historical value;
+        // they should read produced count from the Image table, not this.
       },
     });
-    if (claim.count === 0) return; // another worker already finalized
-    if (refund > 0) {
+    if (claim.count === 0) return;
+    if (targetRefund > 0) {
       await tx.user.update({
         where: { id: job.userId },
-        data: { credits: { increment: refund } },
+        data: { credits: { increment: targetRefund } },
       });
       await tx.creditEntry.create({
         data: {
           userId: job.userId,
           jobId,
-          amount: refund,
+          amount: targetRefund,
           type: "REFUND",
-          note: `Refund ${refund} unproduced panel(s)`,
+          note:
+            alreadyRefunded > 0
+              ? `Top-up refund after retry: ${targetRefund} (net debit now ${produced}/${totalSpent})`
+              : `Refund ${targetRefund} unproduced panel(s)`,
         },
       });
     }
