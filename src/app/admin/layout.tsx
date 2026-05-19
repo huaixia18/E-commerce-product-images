@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getAdminSession } from "@/lib/adminAuth";
 import { Toaster } from "@/components/ui/sonner";
-import { BarChart3, Users, Receipt, Gift } from "lucide-react";
+import { BarChart3, Users, Receipt, Gift, ListChecks } from "lucide-react";
 import { AdminLogoutButton } from "./LogoutButton";
 
 export const metadata = { title: "管理后台 · 图作AI" };
@@ -9,6 +9,7 @@ export const metadata = { title: "管理后台 · 图作AI" };
 const NAV_ITEMS = [
   { href: "/admin", label: "总览", icon: BarChart3 },
   { href: "/admin/users", label: "用户", icon: Users },
+  { href: "/admin/jobs", label: "任务", icon: ListChecks },
   { href: "/admin/orders", label: "订单", icon: Receipt },
   { href: "/admin/referrals", label: "邀请审计", icon: Gift },
 ];
