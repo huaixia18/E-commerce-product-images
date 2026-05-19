@@ -15,9 +15,23 @@ export const ADMIN_COOKIE = "admin_session";
 const ALG = "HS256";
 const TTL_SECONDS = 12 * 60 * 60;
 
+// One-time warning: the admin secret should be independent from the user
+// auth secret so a leak of one doesn't compromise the other. In dev we
+// fall back to AUTH_SECRET for convenience, but log loudly so it can't
+// be missed during deployment review.
+let _warned = false;
 function secretKey(): Uint8Array {
-  const secret = process.env.ADMIN_SESSION_SECRET ?? env().AUTH_SECRET;
-  return new TextEncoder().encode(secret);
+  const explicit = process.env.ADMIN_SESSION_SECRET;
+  if (explicit) return new TextEncoder().encode(explicit);
+  if (!_warned) {
+    console.warn(
+      "[adminAuth] ADMIN_SESSION_SECRET not set — falling back to AUTH_SECRET. " +
+        "Set a separate secret before going to production so a leaked user " +
+        "session token can't be reused to forge admin tokens.",
+    );
+    _warned = true;
+  }
+  return new TextEncoder().encode(env().AUTH_SECRET);
 }
 
 export interface AdminSession {

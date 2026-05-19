@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/adminAuth";
+import { requireSameOrigin } from "@/lib/originCheck";
 
 const schema = z.object({
   /**
@@ -19,6 +20,8 @@ const schema = z.object({
  * amount must not exceed the job's original credits cost.
  */
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const originErr = requireSameOrigin(req);
+  if (originErr) return originErr;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { id } = await ctx.params;

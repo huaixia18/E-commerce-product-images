@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { signAdminToken, setAdminCookie } from "@/lib/adminAuth";
 import { redisConnection } from "@/lib/queue";
+import { requireSameOrigin } from "@/lib/originCheck";
 
 const schema = z.object({
   email: z.string().email(),
@@ -27,6 +28,8 @@ function clientIp(req: Request): string {
 }
 
 export async function POST(req: Request) {
+  const originErr = requireSameOrigin(req);
+  if (originErr) return originErr;
   let json: unknown;
   try {
     json = await req.json();

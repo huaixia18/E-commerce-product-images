@@ -67,7 +67,11 @@ export async function POST(req: Request) {
     }
     await r.set(cdKey, "1", "EX", COOLDOWN_S);
   } catch (e) {
-    console.error("[send-reset-code] redis rate-limit failed", e);
+    console.error("[send-reset-code] redis throttle failed — fail closed", e);
+    return NextResponse.json(
+      { error: "服务暂时不可用" },
+      { status: 503 },
+    );
   }
 
   // Only proceed if user exists. Either way return ok=true to avoid

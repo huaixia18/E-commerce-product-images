@@ -85,9 +85,14 @@ export function isDisposableEmail(email: string): boolean {
 /**
  * Bump the per-IP signup counter. Returns true if this IP is now over the
  * burst limit (i.e. we should reject the new signup).
+ *
+ * When the client IP is unknown (request lacked any of the proxy headers we
+ * trust), we route the count under a shared "unknown" bucket rather than
+ * skipping the check entirely. This means a misconfigured proxy can't be used
+ * to bypass burst limiting — at worst, all unknown-IP signups share the
+ * same quota and step on each other, which is exactly what we want.
  */
 export async function isIpBurstExceeded(ip: string): Promise<boolean> {
-  if (ip === "unknown") return false;
   const key = `signup:ip:${ip}`;
   const count = await redis().incr(key);
   if (count === 1) {
@@ -136,21 +141,24 @@ export async function evaluateReferral(args: {
 }
 
 /**
- * Remember the latest IP + fingerprint seen for a user (set on login/signup).
- * We use this so the next invitee can be cross-checked against the referrer.
- * TTL'd to a day to keep the keyspace bounded.
+ * Recall a user's signup IP + device fingerprint from the User row.
+ *
+ * Previously we cached these in Redis with a 24h TTL — but referrer eligibility
+ * also requires the referrer to be ≥24h old, so the cache always expired before
+ * it could be checked. Now we persist on the User row at signup
+ * (`signupIp` / `signupFp` columns) so the same-IP / same-fingerprint defense
+ * layers actually fire.
  */
-export async function rememberUserDevice(userId: string, ip: string, fp: string) {
-  if (ip === "unknown") return;
-  await redis().setex(`user:device:${userId}`, 24 * 60 * 60, JSON.stringify({ ip, fp }));
-}
-
-export async function recallUserDevice(userId: string): Promise<{ ip: string; fp: string } | null> {
-  const raw = await redis().get(`user:device:${userId}`);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as { ip: string; fp: string };
-  } catch {
-    return null;
-  }
+export async function recallUserDevice(
+  userId: string,
+): Promise<{ ip: string | null; fp: string | null } | null> {
+  // Lazy import to avoid prisma being pulled into edge runtime if referral
+  // helpers are ever imported there.
+  const { prisma } = await import("./prisma");
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { signupIp: true, signupFp: true },
+  });
+  if (!u) return null;
+  return { ip: u.signupIp, fp: u.signupFp };
 }

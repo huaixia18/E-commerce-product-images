@@ -78,7 +78,11 @@ export async function POST(req: Request) {
     }
     await r.set(cdKey, "1", "EX", COOLDOWN_S);
   } catch (e) {
-    console.error("[account/email] rate-limit failed", e);
+    console.error("[account/email] redis throttle failed — fail closed", e);
+    return NextResponse.json(
+      { error: "服务暂时不可用" },
+      { status: 503 },
+    );
   }
 
   const code = String(randomInt(0, 1_000_000)).padStart(6, "0");

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -105,9 +106,12 @@ export function EmailChangeDialog({ currentEmail }: { currentEmail: string }) {
         toast.error(msg);
         return;
       }
-      toast.success("邮箱已修改", { description: "下次登录请使用新邮箱" });
+      toast.success("邮箱已修改", { description: "请使用新邮箱重新登录" });
       setOpen(false);
-      router.refresh();
+      // Stale NextAuth JWT still carries the old email until next refresh.
+      // Force a clean signout so the user lands on /login and the new email
+      // becomes the authoritative identity from now on.
+      await signOut({ callbackUrl: "/login" });
     });
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   REFERRER_REWARD,
@@ -12,7 +13,6 @@ import {
   isIpBurstExceeded,
   evaluateReferral,
   recallUserDevice,
-  rememberUserDevice,
 } from "@/lib/referral";
 
 const schema = z.object({
@@ -70,7 +70,6 @@ export async function POST(req: Request) {
   }
 
   // ─── Verify email code ────────────────────────────────────────────────
-  // Pull the most recent unconsumed, unexpired code for this email.
   const verification = await prisma.emailVerification.findFirst({
     where: {
       email,
@@ -99,8 +98,11 @@ export async function POST(req: Request) {
   }
 
   // ─── Anti-abuse: soft rejections (signup ok, referral dropped) ─────────
+  // Note: the rejection reason is logged server-side but NOT returned to
+  // the client — exposing "same IP" / "referrer too young" etc would help
+  // attackers tune their setup. The client just sees referralRejected:true.
   let referrer: { id: string; createdAt: Date } | null = null;
-  let rejectionReason: string | null = null;
+  let referralRejected = false;
 
   if (ref) {
     const r = await prisma.user.findUnique({
@@ -108,7 +110,8 @@ export async function POST(req: Request) {
       select: { id: true, createdAt: true },
     });
     if (!r) {
-      rejectionReason = "邀请码无效";
+      referralRejected = true;
+      console.log(`[register] referral rejected: invalid code (${ref})`);
     } else {
       referrer = r;
       const device = await recallUserDevice(r.id);
@@ -122,8 +125,11 @@ export async function POST(req: Request) {
         inviteeAlreadyExists: false,
       });
       if (verdict) {
-        rejectionReason = verdict.reason;
+        referralRejected = true;
         referrer = null;
+        console.log(
+          `[register] referral rejected for ${email}: ${verdict.code} — ${verdict.reason}`,
+        );
       }
     }
   }
@@ -133,71 +139,87 @@ export async function POST(req: Request) {
   const inviteeReward = referrer ? INVITEE_REWARD : 0;
   const totalGift = SIGNUP_GIFT + inviteeReward;
 
-  const user = await prisma.$transaction(async (tx) => {
-    // Consume the verification first so even if user creation fails for
-    // some reason later, this code can't be reused.
-    await tx.emailVerification.update({
-      where: { id: verification.id },
-      data: { consumedAt: new Date() },
-    });
-    const now = new Date();
-    const u = await tx.user.create({
-      data: {
-        email,
-        name,
-        passwordHash,
-        credits: totalGift,
-        emailVerified: now,
-        termsAgreedAt: now,
-      },
-    });
-    await tx.creditEntry.create({
-      data: {
-        userId: u.id,
-        amount: SIGNUP_GIFT,
-        type: "ADMIN_ADJUST",
-        note: "Signup gift",
-      },
-    });
-    if (referrer) {
+  let user;
+  try {
+    user = await prisma.$transaction(async (tx) => {
+      // Consume the verification first so even if user creation fails for
+      // some reason later, this code can't be reused.
+      await tx.emailVerification.update({
+        where: { id: verification.id },
+        data: { consumedAt: new Date() },
+      });
+      const now = new Date();
+      const u = await tx.user.create({
+        data: {
+          email,
+          name,
+          passwordHash,
+          credits: totalGift,
+          emailVerified: now,
+          termsAgreedAt: now,
+          // Persist signup device on the row itself so future referral
+          // checks against this user actually have data to compare with.
+          // (The previous Redis cache had a 24h TTL but referrer eligibility
+          // also requires the account to be ≥24h old — the cache was always
+          // gone before it could be checked.)
+          signupIp: ip === "unknown" ? null : ip,
+          signupFp: fp || null,
+        },
+      });
       await tx.creditEntry.create({
         data: {
           userId: u.id,
-          amount: INVITEE_REWARD,
+          amount: SIGNUP_GIFT,
           type: "ADMIN_ADJUST",
-          note: `Invited by referral`,
+          // Tagged note so reports can distinguish signup gifts from genuine
+          // admin adjustments without adding a new enum value to CreditEntryType.
+          note: "[signup_gift] Signup gift",
         },
       });
-      // Grant referrer reward + log
-      await tx.user.update({
-        where: { id: referrer.id },
-        data: { credits: { increment: REFERRER_REWARD } },
-      });
-      await tx.creditEntry.create({
-        data: {
-          userId: referrer.id,
-          amount: REFERRER_REWARD,
-          type: "ADMIN_ADJUST",
-          note: `Referred ${email}`,
-        },
-      });
-      await tx.referral.create({
-        data: {
-          referrerId: referrer.id,
-          inviteeId: u.id,
-          referrerReward: REFERRER_REWARD,
-          inviteeReward: INVITEE_REWARD,
-          inviteeIp: ip === "unknown" ? null : ip,
-          inviteeFp: fp,
-        },
-      });
+      if (referrer) {
+        await tx.creditEntry.create({
+          data: {
+            userId: u.id,
+            amount: INVITEE_REWARD,
+            type: "ADMIN_ADJUST",
+            note: "[referral_invitee] Invited by referral",
+          },
+        });
+        await tx.user.update({
+          where: { id: referrer.id },
+          data: { credits: { increment: REFERRER_REWARD } },
+        });
+        await tx.creditEntry.create({
+          data: {
+            userId: referrer.id,
+            amount: REFERRER_REWARD,
+            type: "ADMIN_ADJUST",
+            note: `[referral_referrer] Referred ${email}`,
+          },
+        });
+        await tx.referral.create({
+          data: {
+            referrerId: referrer.id,
+            inviteeId: u.id,
+            referrerReward: REFERRER_REWARD,
+            inviteeReward: INVITEE_REWARD,
+            inviteeIp: ip === "unknown" ? null : ip,
+            inviteeFp: fp,
+          },
+        });
+      }
+      return u;
+    });
+  } catch (e) {
+    // Race: another concurrent register won the unique-index battle.
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2002"
+    ) {
+      return NextResponse.json({ error: "邮箱已被注册" }, { status: 409 });
     }
-    return u;
-  });
-
-  // Cache the new user's signup device so a future invite from them can
-  // be checked against this IP / FP.
-  await rememberUserDevice(user.id, ip, fp).catch(() => {});
+    throw e;
+  }
 
   return NextResponse.json(
     {
@@ -205,7 +227,8 @@ export async function POST(req: Request) {
       email: user.email,
       credits: user.credits,
       referralApplied: !!referrer,
-      referralRejected: rejectionReason ?? undefined,
+      // Boolean only — never expose the specific rejection reason to client.
+      referralRejected: referralRejected || undefined,
     },
     { status: 201 },
   );

@@ -106,9 +106,8 @@ export default async function InvitePage() {
                     className="px-5 py-3 flex items-center justify-between text-sm"
                   >
                     <div className="min-w-0">
-                      <div className="font-medium truncate">
-                        {r.invitee.name ?? maskEmail(r.invitee.email)}
-                      </div>
+                      {/* Always mask — even nicknames are PII to other users. */}
+                      <div className="font-medium truncate">{maskEmail(r.invitee.email)}</div>
                       <div className="text-xs text-muted-foreground font-mono mt-0.5">
                         {r.createdAt.toLocaleString("zh-CN")}
                       </div>

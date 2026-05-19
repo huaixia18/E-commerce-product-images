@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession } from "@/lib/adminAuth";
+import { requireSameOrigin } from "@/lib/originCheck";
 
 const schema = z.object({ action: z.enum(["mark_paid", "refund"]) });
 
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  const originErr = requireSameOrigin(req);
+  if (originErr) return originErr;
   const admin = await getAdminSession();
   if (!admin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 

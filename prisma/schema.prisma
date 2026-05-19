@@ -24,6 +24,10 @@ model User {
   emailVerified DateTime?
   /** When the user accepted the TOS + privacy policy on signup. */
   termsAgreedAt DateTime?
+  /** IP at signup (for referral anti-abuse cross-check). Nullable for legacy rows. */
+  signupIp      String?
+  /** Device fingerprint at signup. Nullable for legacy rows. */
+  signupFp      String?
   credits       Int       @default(0) // current spendable balance
   /** Shareable invitation code. Stable, indexed for ?ref= lookup. */
   referralCode  String    @unique @default(cuid())

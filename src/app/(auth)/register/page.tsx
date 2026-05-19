@@ -46,7 +46,9 @@ export default async function RegisterPage({
             </span>
             <div className="text-sm">
               <div className="font-extrabold">
-                <span className="text-brand-magenta">{inviter.name ?? inviter.email.split("@")[0]}</span>{" "}
+                {/* Don't leak the inviter's email local-part or nickname to a
+                 * stranger who got a share link — keep it generic. */}
+                <span className="text-brand-magenta">朋友</span>
                 邀请你加入图作AI
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
