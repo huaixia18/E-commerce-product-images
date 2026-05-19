@@ -39,6 +39,31 @@ model User {
   referralReceived  Referral?  @relation("Invitee")
 }
 
+// ─── Email verification (register / future password reset) ───────────────────
+// Holds short-lived one-time codes. The code is bcrypt-hashed so a DB leak
+// doesn't expose live codes. We keep a separate row per code request so we
+// can observe rate-limit history (instead of overwriting).
+
+enum EmailVerificationPurpose {
+  REGISTER
+  PASSWORD_RESET
+}
+
+model EmailVerification {
+  id          String                   @id @default(cuid())
+  email       String
+  purpose     EmailVerificationPurpose @default(REGISTER)
+  codeHash    String                   // bcrypt(code)
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  attempts    Int                      @default(0) // failed verify attempts
+  ip          String?
+  createdAt   DateTime                 @default(now())
+
+  @@index([email, createdAt])
+  @@index([expiresAt])
+}
+
 // ─── Admin (independent auth, separate from User) ────────────────────────────
 // Admins log in through a dedicated /admin/login flow with their own session
 // cookie. There is no relation to User — preventing accidental privilege

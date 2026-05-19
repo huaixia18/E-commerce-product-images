@@ -19,9 +19,13 @@ const schema = z.object({
   email: z.string().email(),
   password: z.string().min(8).max(200),
   name: z.string().min(1).max(40).optional(),
+  /** 6-digit code from /api/auth/send-code. Required. */
+  code: z.string().regex(/^\d{6}$/, "请输入 6 位数字验证码"),
   /** Referrer's referralCode pulled from /register?ref=... */
   ref: z.string().min(1).max(64).optional(),
 });
+
+const MAX_VERIFY_ATTEMPTS = 5;
 
 export async function POST(req: Request) {
   let json: unknown;
@@ -37,7 +41,8 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
-  const { email, password, name, ref } = parsed.data;
+  const { password, name, ref, code } = parsed.data;
+  const email = parsed.data.email.toLowerCase();
 
   // ─── Anti-abuse: hard rejections (block signup entirely) ───────────────
   if (isDisposableEmail(email)) {
@@ -54,6 +59,35 @@ export async function POST(req: Request) {
   const existing = await prisma.user.findUnique({ where: { email } });
   if (existing) {
     return NextResponse.json({ error: "邮箱已被注册" }, { status: 409 });
+  }
+
+  // ─── Verify email code ────────────────────────────────────────────────
+  // Pull the most recent unconsumed, unexpired code for this email.
+  const verification = await prisma.emailVerification.findFirst({
+    where: {
+      email,
+      purpose: "REGISTER",
+      consumedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!verification) {
+    return NextResponse.json({ error: "验证码已过期，请重新获取" }, { status: 400 });
+  }
+  if (verification.attempts >= MAX_VERIFY_ATTEMPTS) {
+    return NextResponse.json(
+      { error: "尝试次数过多，请重新获取验证码" },
+      { status: 429 },
+    );
+  }
+  const codeOk = await bcrypt.compare(code, verification.codeHash);
+  if (!codeOk) {
+    await prisma.emailVerification.update({
+      where: { id: verification.id },
+      data: { attempts: { increment: 1 } },
+    });
+    return NextResponse.json({ error: "验证码不正确" }, { status: 400 });
   }
 
   // ─── Anti-abuse: soft rejections (signup ok, referral dropped) ─────────
@@ -92,8 +126,14 @@ export async function POST(req: Request) {
   const totalGift = SIGNUP_GIFT + inviteeReward;
 
   const user = await prisma.$transaction(async (tx) => {
+    // Consume the verification first so even if user creation fails for
+    // some reason later, this code can't be reused.
+    await tx.emailVerification.update({
+      where: { id: verification.id },
+      data: { consumedAt: new Date() },
+    });
     const u = await tx.user.create({
-      data: { email, name, passwordHash, credits: totalGift },
+      data: { email, name, passwordHash, credits: totalGift, emailVerified: new Date() },
     });
     await tx.creditEntry.create({
       data: {

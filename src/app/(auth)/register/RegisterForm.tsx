@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2 } from "lucide-react";
+
+const RESEND_COOLDOWN_S = 60;
 
 export function RegisterForm({
   refCode,
@@ -17,17 +19,59 @@ export function RegisterForm({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [sending, startSending] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [codeSent, setCodeSent] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [email, setEmail] = useState("");
+
+  // Tick the resend cooldown.
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  function sendCode() {
+    setError(null);
+    const trimmed = email.trim();
+    if (!trimmed || !trimmed.includes("@")) {
+      setError("请先输入邮箱");
+      return;
+    }
+    startSending(async () => {
+      const res = await fetch("/api/auth/send-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { error?: string; resendAfterSeconds?: number };
+      if (!res.ok) {
+        setError(body.error ?? "发送失败");
+        toast.error(body.error ?? "发送失败");
+        return;
+      }
+      setCodeSent(true);
+      setCooldown(body.resendAfterSeconds ?? RESEND_COOLDOWN_S);
+      toast.success("验证码已发送", { description: "请查收邮箱，10 分钟内有效" });
+    });
+  }
 
   function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     const fd = new FormData(e.currentTarget);
+    const code = String(fd.get("code") ?? "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      setError("请输入 6 位数字验证码");
+      return;
+    }
     const payload: Record<string, string> = {
-      email: String(fd.get("email") ?? ""),
+      email: email.trim(),
+      code,
       password: String(fd.get("password") ?? ""),
     };
-    const name = String(fd.get("name") ?? "");
+    const name = String(fd.get("name") ?? "").trim();
     if (name) payload.name = name;
     if (refCode) payload.ref = refCode;
 
@@ -44,7 +88,11 @@ export function RegisterForm({
         toast.error(msg);
         return;
       }
-      const body = (await res.json()) as { credits: number; referralApplied?: boolean; referralRejected?: string };
+      const body = (await res.json()) as {
+        credits: number;
+        referralApplied?: boolean;
+        referralRejected?: string;
+      };
       const signinRes = await fetch("/api/auth/callback/credentials", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -73,13 +121,66 @@ export function RegisterForm({
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="name">昵称 <span className="text-muted-foreground text-xs">（可选）</span></Label>
+        <Label htmlFor="name">
+          昵称 <span className="text-muted-foreground text-xs">（可选）</span>
+        </Label>
         <Input id="name" name="name" type="text" autoComplete="nickname" placeholder="给自己起个名字" />
       </div>
+
       <div className="space-y-2">
         <Label htmlFor="email">邮箱</Label>
-        <Input id="email" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />
+        <Input
+          id="email"
+          name="email"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          required
+          autoComplete="email"
+          placeholder="you@example.com"
+        />
       </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="code">邮箱验证码</Label>
+        <div className="flex gap-2">
+          <Input
+            id="code"
+            name="code"
+            type="text"
+            inputMode="numeric"
+            pattern="\d{6}"
+            maxLength={6}
+            required
+            autoComplete="one-time-code"
+            placeholder="6 位数字"
+            className="font-mono tracking-widest"
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={sendCode}
+            disabled={sending || cooldown > 0}
+            className="whitespace-nowrap rounded-full font-bold"
+          >
+            {sending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : cooldown > 0 ? (
+              `${cooldown}s 后重发`
+            ) : codeSent ? (
+              "重新发送"
+            ) : (
+              "获取验证码"
+            )}
+          </Button>
+        </div>
+        {codeSent && (
+          <p className="text-xs text-muted-foreground">
+            验证码已发送到 <strong>{email}</strong>，10 分钟内有效
+          </p>
+        )}
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="password">密码</Label>
         <Input
@@ -92,7 +193,9 @@ export function RegisterForm({
           placeholder="至少 8 个字符"
         />
       </div>
+
       {error && <p className="text-sm text-destructive">{error}</p>}
+
       <Button type="submit" className="w-full rounded-full font-extrabold" disabled={pending}>
         {pending ? (
           <>
