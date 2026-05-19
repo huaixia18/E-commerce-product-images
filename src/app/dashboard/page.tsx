@@ -6,19 +6,19 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ALL_PANEL_IDS, type PanelId } from "@/lib/promptTemplate";
-import { Sparkles, Wallet, Download, Image as ImageIcon, History, Plus, Bolt } from "lucide-react";
+import { Sparkles, Wallet, Download, Image as ImageIcon, History, Plus, Bolt, Gift, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { headers } from "next/headers";
 import { InvitePanel } from "@/components/InvitePanel";
 
 export const metadata = { title: "我的 · 图作AI" };
 
-const TAB_LABELS = {
-  projects: { label: "我的作品", icon: ImageIcon },
-  credits: { label: "积分明细", icon: Sparkles },
-  orders: { label: "充值记录", icon: History },
-  settings: { label: "账户设置", icon: Wallet },
-} as const;
+const NAV_ITEMS = [
+  { id: "projects", label: "我的作品", icon: ImageIcon, href: "/dashboard", external: false },
+  { id: "invite", label: "邀请中心", icon: Gift, href: "/dashboard/invite", external: false },
+  { id: "settings", label: "账号设置", icon: Settings, href: "/dashboard/settings", external: false },
+  { id: "pricing", label: "充值", icon: Wallet, href: "/pricing", external: false },
+] as const;
 
 export default async function DashboardPage() {
   const session = await auth();
@@ -101,12 +101,13 @@ export default async function DashboardPage() {
           </Card>
 
           <nav className="space-y-1">
-            {Object.entries(TAB_LABELS).map(([id, { label, icon: Icon }]) => (
+            {NAV_ITEMS.map((it) => (
               <NavItem
-                key={id}
-                active={id === "projects"}
-                icon={<Icon className="h-4 w-4" />}
-                label={label}
+                key={it.id}
+                href={it.href}
+                active={it.id === "projects"}
+                icon={<it.icon className="h-4 w-4" />}
+                label={it.label}
               />
             ))}
           </nav>
@@ -251,17 +252,30 @@ function entryLabel(t: string): string {
   }
 }
 
-function NavItem({ active, icon, label }: { active: boolean; icon: React.ReactNode; label: string }) {
+function NavItem({
+  active,
+  icon,
+  label,
+  href,
+}: {
+  active: boolean;
+  icon: React.ReactNode;
+  label: string;
+  href: string;
+}) {
   return (
-    <div
+    <Link
+      href={href}
       className={cn(
-        "flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium",
-        active ? "bg-card text-foreground font-bold shadow-[0_2px_10px_rgba(26,18,8,0.06)]" : "text-muted-foreground",
+        "flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+        active
+          ? "bg-card text-foreground font-bold shadow-[0_2px_10px_rgba(26,18,8,0.06)]"
+          : "text-muted-foreground hover:text-foreground hover:bg-card/60",
       )}
     >
       {icon}
       <span className="flex-1">{label}</span>
-    </div>
+    </Link>
   );
 }
 

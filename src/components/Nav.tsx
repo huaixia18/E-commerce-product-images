@@ -100,6 +100,8 @@ function UserMenu({ email }: { email: string }) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem render={<Link href="/dashboard" />}>控制台</DropdownMenuItem>
+        <DropdownMenuItem render={<Link href="/dashboard/invite" />}>邀请中心</DropdownMenuItem>
+        <DropdownMenuItem render={<Link href="/dashboard/settings" />}>账号设置</DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/pricing" />}>充值积分</DropdownMenuItem>
         <DropdownMenuSeparator />
         <form

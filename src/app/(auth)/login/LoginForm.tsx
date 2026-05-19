@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { signIn } from "next-auth/react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -40,7 +41,12 @@ export function LoginForm({ next }: { next: string }) {
         <Input id="email" name="email" type="email" required autoComplete="email" placeholder="you@example.com" />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="password">密码</Label>
+        <div className="flex items-baseline justify-between">
+          <Label htmlFor="password">密码</Label>
+          <Link href="/forgot" className="text-xs text-primary hover:underline">
+            忘记密码？
+          </Link>
+        </div>
         <Input id="password" name="password" type="password" required autoComplete="current-password" placeholder="••••••••" />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
