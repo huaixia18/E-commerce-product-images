@@ -3,6 +3,7 @@
 // a replayed callback won't double-credit. Returns the NotifyAck the route
 // should reply with (each gateway expects its own ACK format).
 
+import * as Sentry from "@sentry/nextjs";
 import { prisma } from "@/lib/prisma";
 import { paymentProvider } from "./provider";
 import type { PayChannel } from "./packages";
@@ -21,6 +22,9 @@ export async function handlePaymentNotify(
     verify = await provider.verifyNotify(req);
   } catch (e) {
     console.error(`[notify:${channel}] verify threw:`, e);
+    Sentry.captureException(e, {
+      tags: { stage: "payment_verify", channel },
+    });
     // Signature failure etc. Use the provider's own fail ACK if we can derive
     // it; default to a generic 400.
     return { status: 400, contentType: "application/json", body: JSON.stringify({ error: "verify failed" }) };
@@ -43,6 +47,12 @@ export async function handlePaymentNotify(
     console.error(
       `[notify:${channel}] amount mismatch: order=${order.amountCents} event=${event.amountCents} (order ${order.id})`,
     );
+    // A mismatch may indicate tampering — capture it for investigation.
+    Sentry.captureMessage("Payment amount mismatch", {
+      level: "warning",
+      tags: { stage: "payment_settle", channel },
+      extra: { orderId: order.id, orderAmount: order.amountCents, eventAmount: event.amountCents },
+    });
     // Do NOT credit. Return a non-ACK so we get retried / can investigate.
     return { status: 400, contentType: "application/json", body: JSON.stringify({ error: "amount mismatch" }) };
   }

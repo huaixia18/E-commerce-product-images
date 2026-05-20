@@ -24,8 +24,24 @@ import { prisma } from "./lib/prisma";
 import { putObject, signedGetUrl } from "./lib/oss";
 import { generateImage } from "./lib/imageClient";
 import { expandPrompt, type JobInput, type PanelId, ALL_PANEL_IDS } from "./lib/promptTemplate";
+import * as Sentry from "@sentry/node";
 
 const STUB = process.env.STUB_IMAGE_MODEL === "1";
+
+// Error monitoring for the standalone worker — the most important place to
+// have it, since failures here happen in the background where no one sees
+// the console. No-op without SENTRY_DSN.
+const SENTRY_DSN = process.env.SENTRY_DSN ?? "";
+if (SENTRY_DSN) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    tracesSampleRate: 0,
+    sendDefaultPii: false,
+    environment: process.env.NODE_ENV ?? "development",
+    initialScope: { tags: { component: "worker" } },
+  });
+  console.log("[worker] Sentry error monitoring enabled");
+}
 
 const CONCURRENCY = 3;
 
@@ -204,23 +220,39 @@ const worker = new Worker<PanelJobData>(
 
 worker.on("completed", async (job) => {
   console.log(`[worker] completed ${job.id}`);
-  await finalizeIfDone(job.data.jobId).catch((e) =>
-    console.error(`finalize after completed ${job.id}:`, e),
-  );
+  await finalizeIfDone(job.data.jobId).catch((e) => {
+    console.error(`finalize after completed ${job.id}:`, e);
+    Sentry.captureException(e, {
+      tags: { stage: "finalize" },
+      extra: { jobId: job.data.jobId, panelJobId: job.id },
+    });
+  });
 });
 
 worker.on("failed", async (job, err) => {
-  console.error(`[worker] failed ${job?.id} (attempt ${job?.attemptsMade}/${job?.opts.attempts}): ${err.message}`);
-  // Final failure (all attempts exhausted) — finalize will refund this panel.
-  if (job && job.attemptsMade >= (job.opts.attempts ?? 1)) {
-    await finalizeIfDone(job.data.jobId).catch((e) =>
-      console.error(`finalize after failed ${job?.id}:`, e),
-    );
+  const attempt = job?.attemptsMade ?? 0;
+  const maxAttempts = job?.opts.attempts ?? 1;
+  console.error(`[worker] failed ${job?.id} (attempt ${attempt}/${maxAttempts}): ${err.message}`);
+  // Only report to Sentry on FINAL failure (all retries exhausted) to avoid
+  // a noisy event per retry.
+  if (job && attempt >= maxAttempts) {
+    Sentry.captureException(err, {
+      tags: { stage: "panel_generation", final: "true" },
+      extra: { panelJobId: job.id, jobId: job.data.jobId, panel: job.data.panel },
+    });
+    await finalizeIfDone(job.data.jobId).catch((e) => {
+      console.error(`finalize after failed ${job?.id}:`, e);
+      Sentry.captureException(e, {
+        tags: { stage: "finalize" },
+        extra: { jobId: job.data.jobId },
+      });
+    });
   }
 });
 
 worker.on("error", (err) => {
   console.error("[worker] error:", err);
+  Sentry.captureException(err, { tags: { stage: "worker_error" } });
 });
 
 console.log(`[worker] started, concurrency=${CONCURRENCY}, queue=${PANEL_QUEUE}`);

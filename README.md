@@ -246,6 +246,29 @@ pnpm lint              # ESLint
 
 ---
 
+## 错误监控（Sentry）
+
+接入了 `@sentry/nextjs`（服务端 + 客户端）和 `@sentry/node`（worker 进程），
+**三个运行时全覆盖**——尤其是后台 worker，出错现在会上报而不是只打 console。
+
+- **完全由 `SENTRY_DSN` 门控**：不填则 SDK 不初始化、零网络请求，本地开发无干扰。
+- **只做错误监控**，关闭了 performance tracing（`tracesSampleRate=0`），适合自托管实例省存储。
+- 关键路径已埋点：worker 最终失败、finalize 异常、支付回调验签失败、金额不符、React 渲染崩溃（`global-error.tsx`）。
+
+### 接入自托管 Sentry（VPS 上）
+
+1. 在 VPS 上用官方 [self-hosted](https://develop.sentry.dev/self-hosted/) Docker Compose 跑一套 Sentry（约需 4GB 内存）。
+2. 建 project，拿到 DSN。
+3. 填进 `.env`：
+   ```bash
+   SENTRY_DSN="https://...@sentry.your-domain.com/1"
+   NEXT_PUBLIC_SENTRY_DSN="https://...@sentry.your-domain.com/1"
+   ```
+4. （可选）要在生产看到可读堆栈，配 `SENTRY_URL/ORG/PROJECT/AUTH_TOKEN` 让 build 上传 source map。
+5. 重启 web + worker，错误开始上报。
+
+---
+
 ## 路线图
 
 | 阶段 | 范围 | 状态 |

@@ -20,6 +20,8 @@
     "@base-ui/react": "^1.4.1",
     "@prisma/client": "^6.16.2",
     "@radix-ui/react-slot": "^1.2.4",
+    "@sentry/nextjs": "^10.53.1",
+    "@sentry/node": "^10.53.1",
     "ali-oss": "^6.23.0",
     "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
