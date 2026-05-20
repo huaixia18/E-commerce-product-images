@@ -31,15 +31,46 @@ export const STYLE_LABELS: Record<StyleId, string> = {
   warm: "温暖生活感",
 };
 
+// Each style is a dense, photographer-grade description. The vocabulary is
+// deliberately loaded with commercial-photography terms that nudge the model
+// toward catalog-quality output instead of generic renders.
 const STYLE_PROMPTS: Record<StyleId, string> = {
   minimal:
-    "clean minimal e-commerce style, soft neutral background, balanced negative space, crisp studio lighting, subtle shadow",
+    "clean minimalist commercial product photography, seamless pure-white sweep background (#FFFFFF), " +
+    "soft even key light from a large softbox with gentle fill, faint natural contact shadow under the product, " +
+    "generous negative space, true-to-life colors, ultra-sharp focus, high dynamic range, 8k, " +
+    "shot on a 100mm macro lens, studio quality",
   vivid:
-    "vibrant high-contrast e-commerce style, bold complementary color background, dynamic lighting, energetic composition",
+    "vibrant high-energy commercial product photography, bold solid complementary-color backdrop with a subtle gradient, " +
+    "punchy directional lighting with crisp highlights, saturated yet realistic colors, dynamic 3/4 composition, " +
+    "glossy reflective surface, sharp focus, high contrast, 8k, advertising-grade, eye-catching",
   premium:
-    "premium luxury product style, dark moody background with rim lighting, glossy reflections, fine material textures, cinematic depth",
-  warm: "warm lifestyle scene, golden-hour natural light, soft fabric or wood textures, inviting and cozy atmosphere",
+    "premium luxury product photography, deep dark gradient background, dramatic rim lighting and soft top key light, " +
+    "elegant glossy reflections on a polished surface, fine material texture detail (brushed metal, glass, leather), " +
+    "cinematic shallow depth of field, rich shadows, color-graded warm highlights, 8k, ultra-detailed, magazine-quality",
+  warm: "warm lifestyle product photography, golden-hour natural window light, soft wood and linen textures, " +
+    "cozy out-of-focus home background with gentle bokeh, inviting earthy color palette, natural soft shadows, " +
+    "authentic and aspirational, 8k, editorial quality",
 };
+
+// Quality + negative anchors appended to every prompt. Negative phrasing
+// listed as "avoid:" because gpt-image-2 has no separate negative-prompt
+// field — it respects in-prompt exclusions reasonably well.
+const QUALITY_SUFFIX =
+  "Professional studio product photography, photorealistic, commercially polished, " +
+  "perfectly exposed, color-accurate. " +
+  "Avoid: blurry, low-resolution, distorted proportions, warped or duplicated product, " +
+  "extra random objects, messy background, harsh ugly shadows, oversaturated artifacts, " +
+  "plastic-looking CGI, watermark, signature, frame, border.";
+
+// Chinese text rendering is the most fragile part. When we DO ask for Chinese
+// labels, we constrain hard: very short, bold sans-serif, high contrast, and
+// we tell the model legibility matters more than decoration.
+const CN_TEXT_RULES =
+  "If rendering Chinese text, use a clean bold sans-serif (思源黑体 / PingFang style), " +
+  "keep each label to at most 6 characters, large and high-contrast against its background, " +
+  "perfectly legible with correct stroke shapes, no garbled or broken characters. " +
+  "Prefer fewer words over decorative typography.";
 
 export const PLATFORM_LABELS: Record<PlatformId, string> = {
   taobao: "淘宝",
@@ -140,37 +171,60 @@ export function expandPrompt(input: JobInput, panel: PanelId): ExpandedPrompt {
     ? `Product specs: ${specs.map((s) => `${s.label}: ${s.value}`).join("; ")}.`
     : "";
 
-  const base = `E-commerce detail image for product "${input.title}".
-Use the provided reference photo as the product's exact appearance — preserve shape, color, logo, and label.
-Style: ${styleDesc}.${specsLine ? `\n${specsLine}` : ""}
-Output a single image, no text watermark, no border.`;
+  // Whether this panel renders Chinese text (so we only spend the CN rules
+  // budget where it matters — hero stays text-free for a clean main image).
+  let rendersChinese = false;
+
+  const base = `Create one e-commerce detail image for the product 「${input.title}」.
+CRITICAL: the attached reference photo IS the product. Reproduce its exact shape, proportions, color, material, logo and label faithfully — do not redesign or substitute it. Keep it the unmistakable hero of the frame.
+Visual style: ${styleDesc}.${specsLine ? `\n${specsLine}` : ""}`;
 
   let panelBody: string;
   switch (panel) {
     case "hero":
-      panelBody = `Hero shot: the product centered, three-quarter angle, full visibility, neutral background suitable as the listing thumbnail. No text overlay.`;
+      // Main listing image: text-free, platform-clean, product front & center.
+      panelBody =
+        `MAIN LISTING IMAGE. The product occupies ~70% of the frame, centered, ` +
+        `shot from a flattering three-quarter angle, fully visible and tack-sharp. ` +
+        `Plenty of clean margin around it so it reads well as a thumbnail. ` +
+        `Absolutely no text, no logo overlay, no graphic decorations — just the product.`;
       break;
     case "lifestyle":
-      panelBody = `Lifestyle scene showing the product in realistic use. Convey: ${input.highlights.join("; ")}. Natural environment, human elements optional but never showing the user's face clearly.`;
+      panelBody =
+        `LIFESTYLE SCENE. Place the product naturally in a real usage context that conveys: ` +
+        `${input.highlights.join("; ")}. The product stays in clear focus and is the obvious subject. ` +
+        `Tasteful real-world props and environment, soft depth of field. ` +
+        `No people's faces clearly visible. No text overlay.`;
       break;
     case "spec": {
-      // Prefer structured specs when the user provided them; fall back to
-      // highlight bullets for the in-image labels.
       const labels = specs.length
-        ? specs.slice(0, 6).map((s) => `${s.label}: ${s.value}`).join(" | ")
-        : input.highlights.slice(0, 4).join(" | ");
-      panelBody = `Spec/parameter card: the product on a clean studio surface with subtle technical-blueprint accents. List these key specs as small in-image labels: ${labels}. Keep the typography minimal and legible.`;
+        ? specs.slice(0, 6).map((s) => `${s.label} ${s.value}`)
+        : input.highlights.slice(0, 4);
+      rendersChinese = true;
+      panelBody =
+        `SPEC / PARAMETER CARD. The product sits on a clean studio surface with subtle ` +
+        `technical accents (thin guide lines, small icons). Lay out these specs as a tidy ` +
+        `aligned list of short labels: ${labels.map((l) => `「${l}」`).join("  ")}. ` +
+        `Each label short and crisp. Plenty of whitespace, modern infographic look.`;
       break;
     }
     default: {
       const idx = featIdx!;
       const hl = input.highlights[idx] ?? input.highlights[0];
-      panelBody = `Feature panel highlighting: "${hl}". Compose so the visual metaphor for this feature is unmistakable. Optional short Chinese label (one phrase ≤8 chars) integrated into the image; avoid long sentences.`;
+      rendersChinese = true;
+      panelBody =
+        `FEATURE / SELLING-POINT IMAGE highlighting one benefit: 「${hl}」. ` +
+        `Compose a clear visual metaphor or close-up that makes this benefit obvious. ` +
+        `Add one short bold Chinese headline (the benefit phrase, ≤6 characters) ` +
+        `placed in clean negative space, not covering the product.`;
     }
   }
 
+  const parts = [base, panelBody, QUALITY_SUFFIX];
+  if (rendersChinese) parts.push(CN_TEXT_RULES);
+
   return {
-    prompt: `${base}\n\n${panelBody}`,
+    prompt: parts.join("\n\n"),
     size,
   };
 }
