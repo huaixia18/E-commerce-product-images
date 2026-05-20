@@ -7,11 +7,12 @@
 // In production we'll replace this with the real aggregator's adapter.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type {
-  CreateOrderInput,
-  CreateOrderResult,
-  NotifyEvent,
-  PaymentProvider,
+import {
+  ACK,
+  type CreateOrderInput,
+  type CreateOrderResult,
+  type PaymentProvider,
+  type VerifyResult,
 } from "./provider";
 
 const MOCK_SECRET = process.env.AUTH_SECRET ?? "mock-payment-dev-secret";
@@ -43,35 +44,32 @@ export const mockProvider: PaymentProvider = {
     };
   },
 
-  async verifyNotify(req: Request): Promise<NotifyEvent | null> {
-    const body = (await req.json()) as { token?: string };
-    if (!body.token || typeof body.token !== "string") return null;
+  async verifyNotify(req: Request): Promise<VerifyResult> {
+    const body = (await req.json().catch(() => ({}))) as { token?: string };
+    if (!body.token || typeof body.token !== "string") {
+      return { event: null, ack: ACK.mockOk };
+    }
     const [payload, sig] = body.token.split(".");
-    if (!payload || !sig) return null;
-    if (!safeEq(sig, sign(payload))) return null;
-
+    if (!payload || !sig || !safeEq(sig, sign(payload))) {
+      return { event: null, ack: ACK.mockOk };
+    }
     let decoded: { outTradeNo: string; amountCents: number };
     try {
       decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
     } catch {
-      return null;
+      return { event: null, ack: ACK.mockOk };
     }
     if (typeof decoded.outTradeNo !== "string" || typeof decoded.amountCents !== "number") {
-      return null;
+      return { event: null, ack: ACK.mockOk };
     }
     return {
-      outTradeNo: decoded.outTradeNo,
-      amountCents: decoded.amountCents,
-      providerOrderId: `MOCK-${decoded.outTradeNo}`,
-      paidAt: new Date(),
+      event: {
+        outTradeNo: decoded.outTradeNo,
+        amountCents: decoded.amountCents,
+        providerOrderId: `MOCK-${decoded.outTradeNo}`,
+        paidAt: new Date(),
+      },
+      ack: ACK.mockOk,
     };
   },
 };
-
-let _provider: PaymentProvider | null = null;
-export function paymentProvider(): PaymentProvider {
-  if (_provider) return _provider;
-  // Real provider swap would happen here based on env (e.g. PAYMENT_PROVIDER=adapay).
-  _provider = mockProvider;
-  return _provider;
-}

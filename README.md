@@ -192,19 +192,47 @@ pnpm lint              # ESLint
 
 ## 支付集成
 
-当前默认走 `MockProvider`，点击「我已付款（模拟）」会立刻通过 HMAC 签名的 token 模拟 webhook 回调。
+支付走 `PaymentProvider` 抽象（`src/lib/payment/provider.ts`），由 `PAYMENT_PROVIDER`
+环境变量切换：
 
-接入真实聚合支付/微信/支付宝时，只需实现 `src/lib/payment/provider.ts` 里的 `PaymentProvider` 接口：
+| 值 | 行为 |
+|---|---|
+| `mock`（默认）| 弹窗显示假二维码 + 「我已付款（模拟）」按钮，HMAC token 模拟回调，不涉及真钱 |
+| `real` | 微信走 Native 扫码、支付宝走当面付，需要下方真实凭证 + 公网回调地址 |
 
-```ts
-interface PaymentProvider {
-  name: string;
-  createOrder(input): Promise<CreateOrderResult>;   // 创建订单 + 返回 QR 字符串
-  verifyNotify(req: Request): Promise<NotifyEvent | null>;  // 验签 webhook
-}
-```
+三个 provider 实现：
+- `mockProvider.ts` — 开发/演示
+- `wechatProvider.ts` — 微信支付 v3，Native 下单 + AEAD_AES_256_GCM 回调解密 + RSA 验签
+- `alipayProvider.ts` — 支付宝当面付，precreate 下单 + RSA2 验签
 
-写一个新文件 `realProvider.ts`，在 `mockProvider.ts` 的 `paymentProvider()` 工厂里按环境变量切换即可，主流程一行不用动。
+全部只用 Node 原生 `crypto`，无第三方 SDK。
+
+### 接入真实支付（拿到商户号后）
+
+**前置**：你需要一个**个体工商户/公司**主体来申请微信支付 / 支付宝商户号（个人无法申请官方商户）。
+
+1. **微信支付**（[pay.weixin.qq.com](https://pay.weixin.qq.com)）
+   - 申请「Native 支付」产品
+   - 下载商户 API 证书 + 私钥，记下证书序列号
+   - 设置 APIv3 密钥
+   - 下载微信支付平台证书（用于回调验签）
+   - 回调地址填：`<你的域名>/api/payments/notify/wechat`
+
+2. **支付宝**（[open.alipay.com](https://open.alipay.com)）
+   - 创建应用，开通「当面付」
+   - 生成应用私钥 + 上传应用公钥，下载支付宝公钥
+   - 回调地址填：`<你的域名>/api/payments/notify/alipay`
+
+3. 把凭证填进 `.env`（见 `.env.example` 的 Payment 段），把 PEM 私钥/公钥里的换行替换成 `\n` 写成单行。
+
+4. 设 `PAYMENT_PROVIDER="real"`，重启。主流程（下单 → 扫码 → 回调发积分）代码一行不用动。
+
+### 回调安全
+
+- 微信回调：验 `Wechatpay-Signature` RSA 签名 + AEAD 解密 resource，只对 `trade_state=SUCCESS` 发积分
+- 支付宝回调：验 RSA2 签名，只对 `TRADE_SUCCESS`/`TRADE_FINISHED` 发积分
+- 回调金额与订单金额不符 → 拒绝发积分（返回非 ACK 触发网关重试）
+- 重复回调幂等：`updateMany where status='PENDING'`，只有第一次真正发积分
 
 ---
 

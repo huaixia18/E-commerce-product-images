@@ -3,8 +3,16 @@ import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { getPackage, totalCredits } from "@/lib/payment/packages";
-import { paymentProvider } from "@/lib/payment/mockProvider";
+import { paymentProvider } from "@/lib/payment/provider";
 import { env } from "@/lib/env";
+
+// Per-channel webhook URLs. The mock provider ignores notify_url entirely
+// (the dev "我已付款" button posts to /api/payments/notify directly), but
+// real gateways need the channel-specific callback endpoint.
+const NOTIFY_PATH: Record<"wechat" | "alipay", string> = {
+  wechat: "/api/payments/notify/wechat",
+  alipay: "/api/payments/notify/alipay",
+};
 
 const schema = z.object({
   packageId: z.string().min(1),
@@ -48,15 +56,29 @@ export async function POST(req: Request) {
     },
   });
 
-  const provider = paymentProvider();
-  const notifyUrl = `${env().AUTH_URL.replace(/\/$/, "")}/api/payments/notify`;
-  const result = await provider.createOrder({
-    outTradeNo: order.id,
-    amountCents: pkg.amountCents,
-    channel: parsed.data.channel,
-    subject: `${pkg.label} · ${credits} 积分`,
-    notifyUrl,
-  });
+  const channel = parsed.data.channel;
+  const provider = paymentProvider(channel);
+  const base = env().AUTH_URL.replace(/\/$/, "");
+  const notifyUrl = `${base}${NOTIFY_PATH[channel]}`;
+
+  let result;
+  try {
+    result = await provider.createOrder({
+      outTradeNo: order.id,
+      amountCents: pkg.amountCents,
+      channel,
+      subject: `${pkg.label} · ${credits} 积分`,
+      notifyUrl,
+    });
+  } catch (e) {
+    // Provider misconfigured / gateway error. Mark the pending order failed
+    // so it doesn't linger, and surface a clean error.
+    console.error("[orders] createOrder failed", e);
+    await prisma.order
+      .update({ where: { id: order.id }, data: { status: "FAILED" } })
+      .catch(() => {});
+    return NextResponse.json({ error: "支付下单失败，请稍后再试" }, { status: 502 });
+  }
 
   // Attach provider order id for later reconciliation.
   if (result.providerOrderId) {
