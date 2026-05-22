@@ -54,51 +54,72 @@ export function PhonePreview({
 
   return (
     <div className={cn("flex flex-col items-center", className)}>
-      {/* Phone frame */}
-      <div className="relative w-[260px] rounded-[2.2rem] bg-[#1B1714] p-2.5 shadow-[0_20px_50px_-12px_rgba(26,18,8,0.45)]">
-        {/* notch */}
-        <div className="absolute left-1/2 top-2.5 z-20 h-4 w-20 -translate-x-1/2 rounded-b-2xl bg-[#1B1714]" />
-        <div className="relative h-[480px] overflow-hidden rounded-[1.7rem] bg-card">
-          {/* platform status/title bar */}
-          <div className={cn("flex items-center gap-2 px-3 py-2 text-white", layout.accent)}>
-            <span className="text-[11px] font-black tracking-tight">{layout.chrome}</span>
-            <span className="ml-auto text-[9px] opacity-80 truncate max-w-[120px]">
-              {title || "商品详情"}
-            </span>
+      {/* Phone frame — true device aspect (~9:19.5). Content scrolls inside. */}
+      <div className="relative w-[268px] aspect-[9/19] rounded-[2.6rem] bg-[#1B1714] p-2 shadow-[0_24px_60px_-15px_rgba(26,18,8,0.5)] ring-1 ring-black/5">
+        {/* screen */}
+        <div className="relative h-full w-full overflow-hidden rounded-[2.1rem] bg-card flex flex-col">
+          {/* status bar (time + notch + signal), part of the platform chrome */}
+          <div className={cn("relative shrink-0 text-white", layout.accent)}>
+            <div className="flex items-center justify-between px-4 pt-1.5 pb-0.5 text-[9px] font-bold">
+              <span>9:41</span>
+              <span className="flex items-center gap-1 opacity-90">
+                <span>5G</span>
+                <span className="inline-block h-2 w-4 rounded-[2px] border border-white/70 relative">
+                  <span className="absolute inset-[1px] right-1 bg-white/90 rounded-[1px]" />
+                </span>
+              </span>
+            </div>
+            {/* notch */}
+            <div className="absolute left-1/2 top-0 h-4 w-20 -translate-x-1/2 rounded-b-2xl bg-[#1B1714]" />
+            {/* title row */}
+            <div className="flex items-center gap-2 px-3 pb-2">
+              <span className="text-[11px] font-black tracking-tight">{layout.chrome}</span>
+              <span className="ml-auto text-[9px] opacity-80 truncate max-w-[130px]">
+                {title || "商品详情"}
+              </span>
+            </div>
           </div>
 
-          {/* scrollable page */}
-          <div className="h-[calc(480px-32px)] overflow-y-auto">
-            {/* HERO */}
-            {layout.heroMode === "gallery" ? (
-              <AmazonHero tile={hero} on={heroOn} />
-            ) : (
-              <CarouselHero tile={hero} on={heroOn} count={blocks.length + (heroOn ? 1 : 0)} />
-            )}
+          {/* scrollable page — fills remaining height, content clipped to frame */}
+          <div className="relative flex-1 min-h-0">
+            <div className="absolute inset-0 overflow-y-auto">
+              {/* HERO */}
+              {layout.heroMode === "gallery" ? (
+                <AmazonHero tile={hero} on={heroOn} />
+              ) : (
+                <CarouselHero tile={hero} on={heroOn} count={blocks.length + (heroOn ? 1 : 0)} />
+              )}
 
-            {/* price / title strip (decorative, makes it read like a real page) */}
-            <div className="px-3 py-2 border-b border-border">
-              <div className="flex items-baseline gap-1">
-                <span className="text-destructive font-black text-base">¥199</span>
-                <span className="text-muted-foreground text-[10px] line-through">¥299</span>
+              {/* price / title strip (decorative, makes it read like a real page) */}
+              <div className="px-3 py-2 border-b border-border">
+                <div className="flex items-baseline gap-1">
+                  <span className="text-destructive font-black text-base">¥199</span>
+                  <span className="text-muted-foreground text-[10px] line-through">¥299</span>
+                </div>
+                <div className="text-[11px] font-bold text-foreground truncate mt-0.5">
+                  {title || "你的商品标题"}
+                </div>
               </div>
-              <div className="text-[11px] font-bold text-foreground truncate mt-0.5">
-                {title || "你的商品标题"}
-              </div>
+
+              {/* DETAIL BLOCKS */}
+              {blocks.length === 0 ? (
+                <div className="px-3 py-8 text-center text-[10px] text-muted-foreground">
+                  选择要生成的图，详情区会按 {layout.chrome} 版式排列
+                </div>
+              ) : (
+                <div className={layout.heroMode === "gallery" ? "p-3 space-y-3" : ""}>
+                  {blocks.map((b) => (
+                    <Block key={b.panel} block={b} tile={byPanel.get(b.panel)!} specs={specs} />
+                  ))}
+                  {/* bottom spacer so last block clears the home indicator */}
+                  <div className="h-8" />
+                </div>
+              )}
             </div>
-
-            {/* DETAIL BLOCKS */}
-            {blocks.length === 0 ? (
-              <div className="px-3 py-8 text-center text-[10px] text-muted-foreground">
-                选择要生成的图，详情区会按 {layout.chrome} 版式排列
-              </div>
-            ) : (
-              <div className={layout.heroMode === "gallery" ? "p-3 space-y-3" : ""}>
-                {blocks.map((b) => (
-                  <Block key={b.panel} block={b} tile={byPanel.get(b.panel)!} specs={specs} />
-                ))}
-              </div>
-            )}
+            {/* fade hint that the page continues scrolling */}
+            <div className="pointer-events-none absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-card to-transparent" />
+            {/* home indicator */}
+            <div className="pointer-events-none absolute bottom-1.5 left-1/2 -translate-x-1/2 h-1 w-24 rounded-full bg-foreground/30" />
           </div>
         </div>
       </div>
