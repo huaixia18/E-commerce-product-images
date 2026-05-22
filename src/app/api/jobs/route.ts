@@ -6,7 +6,7 @@ import { signedGetUrl } from "@/lib/oss";
 import { ALL_PANEL_IDS, PANEL_IDS, type JobInput, type PanelId } from "@/lib/promptTemplate";
 
 const STYLES = ["minimal", "vivid", "premium", "warm"] as const;
-const PLATFORMS = ["taobao", "tmall", "jd", "amazon", "generic"] as const;
+const PLATFORMS = ["taobao", "tmall", "jd", "amazon", "pinduoduo", "generic"] as const;
 
 const schema = z.object({
   title: z.string().min(1).max(80),

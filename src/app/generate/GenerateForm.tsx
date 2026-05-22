@@ -4,8 +4,8 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { compressImage, TARGET_MIME } from "@/lib/clientImage";
-import { PANELS, type PanelId } from "@/lib/promptTemplate";
-import { PuzzleMosaic } from "@/components/PuzzleMosaic";
+import { PANELS, PLATFORM_PANELS, type PanelId, type PlatformId } from "@/lib/promptTemplate";
+import { PhonePreview, type PhoneTile } from "@/components/PhonePreview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +34,7 @@ const PLATFORMS = [
   { name: "天猫", value: "tmall" as const, size: "1024×1024" },
   { name: "京东", value: "jd" as const, size: "1024×1024" },
   { name: "亚马逊", value: "amazon" as const, size: "2048×2048" },
+  { name: "拼多多", value: "pinduoduo" as const, size: "1024×1024" },
   { name: "通用", value: "generic" as const, size: "1024×1024" },
 ];
 const STYLES = [
@@ -56,9 +57,9 @@ export function GenerateForm({
   const [title, setTitle] = useState("");
   const [pointsInputs, setPointsInputs] = useState<string[]>(["", "", ""]);
   const [style, setStyle] = useState<(typeof STYLES)[number]["value"]>("vivid");
-  const [platform, setPlatform] = useState<(typeof PLATFORMS)[number]["value"]>("taobao");
+  const [platform, setPlatform] = useState<PlatformId>("taobao");
   const [selectedPanels, setSelectedPanels] = useState<Set<PanelId>>(
-    new Set(PANELS.map((p) => p.id)),
+    new Set(PLATFORM_PANELS.taobao),
   );
   const [specs, setSpecs] = useState<SpecRow[]>([]);
   const [drag, setDrag] = useState(false);
@@ -73,15 +74,28 @@ export function GenerateForm({
 
   const platformInfo = PLATFORMS.find((p) => p.value === platform)!;
 
-  // Preview mosaic shows selected panels filled + others as dashed empty.
-  const previewTiles = useMemo(
+  // Phone preview: selected panels shown as filled placeholders, others off.
+  // Feature panels carry the matching highlight as their label.
+  const previewTiles = useMemo<PhoneTile[]>(
     () =>
-      PANELS.map(({ id }, i) => ({
-        panel: id,
-        state: selectedPanels.has(id) ? ("done" as const) : ("off" as const),
-        label: validPoints[i - 1] || undefined,
-      })),
-    [selectedPanels, validPoints],
+      PANELS.map(({ id }) => {
+        const featIdx = id === "feature_1" ? 0 : id === "feature_2" ? 1 : id === "feature_3" ? 2 : null;
+        const label = featIdx !== null ? validPoints[featIdx] : id === "hero" ? title : undefined;
+        return {
+          panel: id,
+          state: selectedPanels.has(id) ? ("done" as const) : ("off" as const),
+          label,
+        };
+      }),
+    [selectedPanels, validPoints, title],
+  );
+
+  const previewSpecs = useMemo(
+    () =>
+      specs
+        .map((s) => ({ label: s.label.trim(), value: s.value.trim() }))
+        .filter((s) => s.label && s.value),
+    [specs],
   );
 
   async function handleFiles(files: FileList | null) {
@@ -137,6 +151,12 @@ export function GenerateForm({
   function addPoint() {
     if (pointsInputs.length >= 5) return;
     setPointsInputs((p) => [...p, ""]);
+  }
+  function selectPlatform(p: PlatformId) {
+    setPlatform(p);
+    // Reset the panel selection to the marketplace's default set so the preview
+    // reflects that platform's typical detail page out of the box.
+    setSelectedPanels(new Set(PLATFORM_PANELS[p]));
   }
   function togglePanel(id: PanelId) {
     setSelectedPanels((p) => {
@@ -379,7 +399,7 @@ export function GenerateForm({
                 <button
                   key={p.value}
                   type="button"
-                  onClick={() => setPlatform(p.value)}
+                  onClick={() => selectPlatform(p.value)}
                   className={cn(
                     "inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold transition-all border",
                     active
@@ -488,11 +508,16 @@ export function GenerateForm({
       {/* RIGHT — preview + CTA */}
       <aside className="border-l border-border bg-card flex flex-col">
         <header className="px-5 py-3.5 border-b border-border flex items-center justify-between">
-          <div className="text-xs font-extrabold">预览 · 拼图布局</div>
+          <div className="text-xs font-extrabold">预览 · {PLATFORMS.find((p) => p.value === platform)?.name}详情页</div>
           <div className="text-[11px] text-muted-foreground font-mono">{platformInfo.size}</div>
         </header>
-        <div className="flex-1 p-4 overflow-y-auto">
-          <PuzzleMosaic tiles={previewTiles} rowHeight={36} />
+        <div className="flex-1 p-4 overflow-y-auto grid place-items-start justify-center">
+          <PhonePreview
+            platform={platform}
+            tiles={previewTiles}
+            specs={previewSpecs}
+            title={title.trim() || undefined}
+          />
         </div>
         <footer className="px-5 py-4 border-t border-border bg-card space-y-2.5">
           <div className="flex items-baseline justify-between text-xs">

@@ -2,11 +2,26 @@ import Link from "next/link";
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { PuzzleMosaic, ALL_PANELS_FOR_DEMO } from "@/components/PuzzleMosaic";
+import { PhonePreview, type PhoneTile } from "@/components/PhonePreview";
 import { PACKAGES, PACKAGE_ORDER } from "@/lib/payment/packages";
 import { ArrowRight, Sparkles, Layers, Coins } from "lucide-react";
 
 const PLATFORMS = ["淘宝", "天猫", "京东", "亚马逊", "抖音", "小红书", "拼多多"];
+
+const DEMO_TILES: PhoneTile[] = [
+  { panel: "hero", state: "done", label: "春日轻盈咖啡杯" },
+  { panel: "feature_1", state: "done", label: "360° 防漏" },
+  { panel: "feature_2", state: "done", label: "真空保温 12h" },
+  { panel: "feature_3", state: "done", label: "316 食品级钢" },
+  { panel: "lifestyle", state: "done", label: "桌面场景" },
+  { panel: "spec", state: "done" },
+];
+const DEMO_SPECS = [
+  { label: "容量", value: "480ml" },
+  { label: "材质", value: "316 不锈钢" },
+  { label: "保温", value: "12 小时" },
+  { label: "重量", value: "320g" },
+];
 
 export default async function Home() {
   const session = await auth();
@@ -85,7 +100,7 @@ function Hero({ loggedIn }: { loggedIn: boolean }) {
           >
             ✨ 6 张一套出
           </div>
-          <PuzzleMosaic tiles={ALL_PANELS_FOR_DEMO} rowHeight={56} />
+          <PhonePreview platform="taobao" tiles={DEMO_TILES} specs={DEMO_SPECS} title="春日轻盈咖啡杯" />
         </div>
       </div>
     </section>

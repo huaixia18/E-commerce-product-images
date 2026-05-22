@@ -64,6 +64,7 @@ export default async function JobPreviewPage({
         title={input.title}
         initialStatus={job.status}
         panels={panels}
+        platform={input.platform ?? "generic"}
         credits={user?.credits ?? 0}
         sources={sources}
         highlights={input.highlights}

@@ -22,7 +22,7 @@ export interface JobInput {
 }
 
 export type StyleId = "minimal" | "vivid" | "premium" | "warm";
-export type PlatformId = "taobao" | "tmall" | "jd" | "amazon" | "generic";
+export type PlatformId = "taobao" | "tmall" | "jd" | "amazon" | "pinduoduo" | "generic";
 
 export const STYLE_LABELS: Record<StyleId, string> = {
   minimal: "极简",
@@ -77,6 +77,7 @@ export const PLATFORM_LABELS: Record<PlatformId, string> = {
   tmall: "天猫",
   jd: "京东",
   amazon: "亚马逊",
+  pinduoduo: "拼多多",
   generic: "通用",
 };
 
@@ -126,6 +127,14 @@ export const PRESET_PLATFORM_SIZES: Record<PlatformId, Record<PanelId, string>> 
     lifestyle: "2048x1152",
     spec: "2048x2048",
   },
+  pinduoduo: {
+    hero: "1024x1024",
+    feature_1: "1024x1024",
+    feature_2: "1024x1024",
+    feature_3: "1024x1024",
+    lifestyle: "1536x1024",
+    spec: "1024x1024",
+  },
   generic: {
     hero: "1024x1024",
     feature_1: "1024x1024",
@@ -134,6 +143,27 @@ export const PRESET_PLATFORM_SIZES: Record<PlatformId, Record<PanelId, string>> 
     lifestyle: "1536x1024",
     spec: "1024x1024",
   },
+};
+
+/**
+ * Default panel set per platform — reflects each marketplace's real detail-page
+ * conventions. Users can still toggle individual panels; this is just the
+ * sensible starting selection when they pick a platform.
+ *
+ *   - Taobao:  full rich detail page → all 6 panels
+ *   - Tmall:   white-bg hero + key features + spec + one lifestyle
+ *   - JD:      hero + 3 features + spec (spec-heavy audience)
+ *   - Amazon:  hero + features + lifestyle for the image gallery; no spec card
+ *              (specs live in the bullet/table area, not the gallery)
+ *   - Pinduoduo: lean — hero + 2 features + spec
+ */
+export const PLATFORM_PANELS: Record<PlatformId, PanelId[]> = {
+  taobao: ["hero", "feature_1", "feature_2", "feature_3", "lifestyle", "spec"],
+  tmall: ["hero", "feature_1", "feature_2", "spec", "lifestyle"],
+  jd: ["hero", "feature_1", "feature_2", "feature_3", "spec"],
+  amazon: ["hero", "feature_1", "feature_2", "feature_3", "lifestyle"],
+  pinduoduo: ["hero", "feature_1", "feature_2", "spec"],
+  generic: ["hero", "feature_1", "feature_2", "feature_3", "lifestyle", "spec"],
 };
 
 // ─── Prompt expansion ─────────────────────────────────────────────────────────

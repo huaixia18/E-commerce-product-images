@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import type { JobSpec, PanelId } from "@/lib/promptTemplate";
-import { PuzzleMosaic, type MosaicTile } from "@/components/PuzzleMosaic";
+import type { JobSpec, PanelId, PlatformId } from "@/lib/promptTemplate";
+import { PhonePreview, type PhoneTile } from "@/components/PhonePreview";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +41,7 @@ export function JobView({
   title,
   initialStatus,
   panels,
+  platform,
   credits,
   sources,
   highlights,
@@ -50,6 +51,7 @@ export function JobView({
   title: string;
   initialStatus: Status;
   panels: PanelId[];
+  platform: PlatformId;
   credits: number;
   sources: { id: string; url: string }[];
   highlights: string[];
@@ -112,15 +114,15 @@ export function JobView({
   const cost = panels.length;
   const enoughCredits = credits >= cost;
 
-  // Map panel statuses → mosaic tiles. Each highlight feeds the corresponding feature tile.
-  // API uses "pending" for queued tiles; mosaic uses "queued".
-  function mapState(s: PanelState | undefined): MosaicTile["state"] {
+  // Map panel statuses → phone-preview tiles. Each highlight feeds the
+  // corresponding feature tile. API uses "pending" for queued tiles.
+  function mapState(s: PanelState | undefined): PhoneTile["state"] {
     if (!s || s === "pending") return "queued";
     return s;
   }
-  const tiles: MosaicTile[] = panels.map((p) => {
+  const tiles: PhoneTile[] = panels.map((p) => {
     const ps = status?.panels.find((x) => x.panel === p);
-    const state: MosaicTile["state"] = mapState(ps?.state);
+    const state: PhoneTile["state"] = mapState(ps?.state);
     const featIdx = p === "feature_1" ? 0 : p === "feature_2" ? 1 : p === "feature_3" ? 2 : null;
     const label = featIdx !== null ? highlights[featIdx] ?? "" : p === "hero" ? title : undefined;
     const progress = state === "running" ? 0.45 : undefined;
@@ -165,14 +167,10 @@ export function JobView({
             )}
           </header>
 
-          {/* Mosaic */}
-          <PuzzleMosaic
-            tiles={tiles}
-            rowHeight={72}
-            showAllStates
-          />
+          {/* Platform detail-page preview */}
+          <PhonePreview platform={platform} tiles={tiles} specs={specs} title={title} />
 
-          {/* Source/spec info card under the mosaic */}
+          {/* Source/spec info card under the preview */}
           <Card className="border-border">
             <CardContent className="p-5 grid grid-cols-1 sm:grid-cols-3 gap-5">
               <div>
@@ -283,8 +281,8 @@ export function JobView({
   );
 }
 
-function QueueRow({ tile, index }: { tile: MosaicTile; index: number }) {
-  const STATE_MAP: Record<NonNullable<MosaicTile["state"]>, { c: string; label: string; icon: React.ReactNode }> = {
+function QueueRow({ tile, index }: { tile: PhoneTile; index: number }) {
+  const STATE_MAP: Record<NonNullable<PhoneTile["state"]>, { c: string; label: string; icon: React.ReactNode }> = {
     done:    { c: "text-success",     label: "完成",       icon: <CheckCircle2 className="h-3 w-3" /> },
     running: { c: "text-primary",     label: "生成中",     icon: <Sparkles className="h-3 w-3" /> },
     failed:  { c: "text-destructive", label: "失败 · 已退分", icon: <XCircle className="h-3 w-3" /> },

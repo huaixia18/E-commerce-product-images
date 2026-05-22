@@ -86,6 +86,7 @@ export function JobViewLoader({ jobId, credits }: { jobId: string; credits: numb
         title={detail.title}
         initialStatus={detail.status}
         panels={panels}
+        platform={detail.platform ?? "generic"}
         credits={credits}
         sources={detail.sources}
         highlights={detail.highlights}
