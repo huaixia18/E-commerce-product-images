@@ -212,7 +212,15 @@ function Block({ block, tile, specs }: { block: DetailBlock; tile: PhoneTile; sp
     );
   }
 
-  // longImage — full-bleed
+  // longImage — full-bleed. When the image is ready, show it at its natural
+  // ratio (no crop) so baked-in copy stays fully visible; otherwise use a
+  // fixed placeholder box.
+  if (tile.state === "done" && tile.imageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={tile.imageUrl} alt={tile.label ?? block.panel} className="block w-full" />
+    );
+  }
   return (
     <div className="aspect-[3/4] w-full">
       <TileSurface tile={tile} on rounded={false} panel={block.panel} />
