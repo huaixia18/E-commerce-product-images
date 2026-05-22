@@ -61,6 +61,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }),
   );
 
+  // Source photos (signed) + display meta, so a client can render the full
+  // job view without a server round-trip (used by the workbench).
+  const sources = job.images
+    .filter((i) => i.kind === "SOURCE")
+    .map((i) => ({ id: i.id, url: i.url ?? signedGetUrl(i.ossKey, 3600) }));
+
   return NextResponse.json({
     id: job.id,
     status: job.status,
@@ -69,5 +75,12 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     finishedAt: job.finishedAt,
     errorMessage: job.errorMessage,
     panels,
+    title: input.title,
+    style: input.style ?? null,
+    platform: input.platform ?? null,
+    highlights: input.highlights ?? [],
+    specs: input.specs ?? [],
+    requestedPanels: requested,
+    sources,
   });
 }

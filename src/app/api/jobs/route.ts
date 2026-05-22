@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { PANEL_IDS, type PanelId } from "@/lib/promptTemplate";
+import { signedGetUrl } from "@/lib/oss";
+import { ALL_PANEL_IDS, PANEL_IDS, type JobInput, type PanelId } from "@/lib/promptTemplate";
 
 const STYLES = ["minimal", "vivid", "premium", "warm"] as const;
 const PLATFORMS = ["taobao", "tmall", "jd", "amazon", "generic"] as const;
@@ -31,6 +32,54 @@ const schema = z.object({
     .max(8)
     .optional(),
 });
+
+/**
+ * List the current user's jobs for the workbench left rail.
+ * Returns lightweight rows + one thumbnail (first GENERATED image) per job.
+ */
+export async function GET() {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const jobs = await prisma.job.findMany({
+    where: { userId: session.user.id },
+    orderBy: { createdAt: "desc" },
+    take: 60,
+    select: {
+      id: true,
+      status: true,
+      createdAt: true,
+      creditsCost: true,
+      inputJson: true,
+      images: {
+        where: { kind: "GENERATED" },
+        orderBy: { createdAt: "asc" },
+        take: 1,
+        select: { ossKey: true, url: true },
+      },
+    },
+  });
+
+  const items = jobs.map((j) => {
+    const input = j.inputJson as unknown as JobInput;
+    const panels = (input.panels ?? ALL_PANEL_IDS) as PanelId[];
+    const thumb = j.images[0];
+    return {
+      id: j.id,
+      title: input.title ?? "未命名项目",
+      platform: input.platform ?? "generic",
+      style: input.style ?? "minimal",
+      status: j.status,
+      createdAt: j.createdAt,
+      panelCount: panels.length,
+      thumbUrl: thumb ? (thumb.url ?? signedGetUrl(thumb.ossKey, 3600)) : null,
+    };
+  });
+
+  return NextResponse.json({ items });
+}
 
 export async function POST(req: Request) {
   const session = await auth();

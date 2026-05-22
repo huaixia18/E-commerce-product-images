@@ -43,7 +43,14 @@ const STYLES = [
   { name: "温暖生活感", value: "warm" as const, c1: "bg-[#F4DCC0]", c2: "bg-[#C97B4E]" },
 ];
 
-export function GenerateForm({ credits }: { credits: number }) {
+export function GenerateForm({
+  credits,
+  onCreated,
+}: {
+  credits: number;
+  /** When provided, called with the new job id instead of navigating. */
+  onCreated?: (jobId: string) => void;
+}) {
   const router = useRouter();
   const [slots, setSlots] = useState<Slot[]>([]);
   const [title, setTitle] = useState("");
@@ -180,12 +187,19 @@ export function GenerateForm({ credits }: { credits: number }) {
         return;
       }
       const body = (await res.json()) as { id: string };
-      router.push(`/generate/${body.id}`);
+      if (onCreated) onCreated(body.id);
+      else router.push(`/generate/${body.id}`);
     });
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-[320px_1fr_400px] min-h-[calc(100vh-4rem)] bg-background">
+    <form
+      onSubmit={handleSubmit}
+      className={cn(
+        "grid grid-cols-1 lg:grid-cols-[320px_1fr_400px] bg-background",
+        onCreated ? "h-full" : "min-h-[calc(100vh-4rem)]",
+      )}
+    >
       {/* LEFT — uploads + selling points */}
       <aside className="border-r border-border bg-card p-5 space-y-6 overflow-y-auto">
         <section>

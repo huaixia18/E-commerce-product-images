@@ -39,6 +39,7 @@ export async function Nav() {
           {session?.user ? (
             <>
               <Link href="/dashboard" className="hover:text-foreground hidden sm:inline">控制台</Link>
+              <Link href="/gallery" className="hover:text-foreground hidden sm:inline">图库</Link>
               <CreditChip credits={credits ?? 0} />
               <Button asChild size="sm" className="gap-1.5 font-bold rounded-full px-4">
                 <Link href="/generate">
@@ -100,6 +101,7 @@ function UserMenu({ email }: { email: string }) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem render={<Link href="/dashboard" />}>控制台</DropdownMenuItem>
+        <DropdownMenuItem render={<Link href="/gallery" />}>历史图库</DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/dashboard/invite" />}>邀请中心</DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/dashboard/settings" />}>账号设置</DropdownMenuItem>
         <DropdownMenuItem render={<Link href="/pricing" />}>充值积分</DropdownMenuItem>

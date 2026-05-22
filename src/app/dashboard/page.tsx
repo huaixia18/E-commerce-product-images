@@ -15,6 +15,7 @@ export const metadata = { title: "我的 · 图作AI" };
 
 const NAV_ITEMS = [
   { id: "projects", label: "我的作品", icon: ImageIcon, href: "/dashboard", external: false },
+  { id: "gallery", label: "历史图库", icon: History, href: "/gallery", external: false },
   { id: "invite", label: "邀请中心", icon: Gift, href: "/dashboard/invite", external: false },
   { id: "settings", label: "账号设置", icon: Settings, href: "/dashboard/settings", external: false },
   { id: "pricing", label: "充值", icon: Wallet, href: "/pricing", external: false },
